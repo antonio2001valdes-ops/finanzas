@@ -4,509 +4,342 @@ import jsPDF from 'jspdf'
 import { db } from '@/lib/db-client'
 import { formatCurrency, MONTHS_ES } from '@/lib/finance-utils'
 
-// ─── Load font as base64 ──────────────────────────────────────────
+// ─── Font loading ─────────────────────────────────────────────────
 
-async function loadFontBase64(): Promise<string> {
-  const response = await fetch('/fonts/SarasaMonoSC-Regular.ttf')
-  const blob = await response.blob()
-  const arrayBuffer = await blob.arrayBuffer()
-  return arrayBufferToBase64(arrayBuffer)
+async function loadFont(url: string): Promise<string> {
+  const res = await fetch(url)
+  const buf = await res.arrayBuffer()
+  let bin = ''
+  const bytes = new Uint8Array(buf)
+  for (let i = 0; i < bytes.byteLength; i++) bin += String.fromCharCode(bytes[i])
+  return btoa(bin)
 }
 
-async function loadFontBoldBase64(): Promise<string> {
-  const response = await fetch('/fonts/SarasaMonoSC-Bold.ttf')
-  const blob = await response.blob()
-  const arrayBuffer = await blob.arrayBuffer()
-  return arrayBufferToBase64(arrayBuffer)
-}
+// ─── B&W palette ──────────────────────────────────────────────────
 
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  let binary = ''
-  const bytes = new Uint8Array(buffer)
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i])
-  }
-  return btoa(binary)
-}
-
-// ─── Neon Colors ──────────────────────────────────────────────────
-
-const COLORS = {
-  cyan: [5, 217, 232] as [number, number, number],
-  green: [1, 255, 137] as [number, number, number],
-  pink: [255, 42, 109] as [number, number, number],
-  orange: [255, 140, 0] as [number, number, number],
-  purple: [211, 0, 197] as [number, number, number],
-  yellow: [249, 240, 2] as [number, number, number],
-  bg: [10, 10, 26] as [number, number, number],
-  cardBg: [20, 20, 45] as [number, number, number],
-  text: [224, 230, 240] as [number, number, number],
-  muted: [124, 139, 161] as [number, number, number],
-  border: [30, 30, 60] as [number, number, number],
-}
+const BLK = 0
+const DGRAY = 100
+const LGRAY = 200
+const WHITE = 255
 
 // ─── Generate Monthly Summary PDF ─────────────────────────────────
 
 export async function generateMonthlySummaryPDF(month: number, year: number): Promise<void> {
-  // Load fonts
-  const [fontBase64, fontBoldBase64] = await Promise.all([loadFontBase64(), loadFontBoldBase64()])
+  const [fontRegular, fontBold] = await Promise.all([
+    loadFont('/fonts/SarasaMonoSC-Regular.ttf'),
+    loadFont('/fonts/SarasaMonoSC-Bold.ttf'),
+  ])
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
 
-  // Register fonts
-  doc.addFileToVFS('SarasaMono.ttf', fontBase64)
-  doc.addFileToVFS('SarasaMono-Bold.ttf', fontBoldBase64)
-  doc.addFont('SarasaMono.ttf', 'SarasaMono', 'normal')
-  doc.addFont('SarasaMono-Bold.ttf', 'SarasaMono', 'bold')
+  doc.addFileToVFS('SM.ttf', fontRegular)
+  doc.addFileToVFS('SM-Bold.ttf', fontBold)
+  doc.addFont('SM.ttf', 'SM', 'normal')
+  doc.addFont('SM-Bold.ttf', 'SM', 'bold')
+  doc.setFont('SM')
 
-  doc.setFont('SarasaMono')
-
-  const pageW = doc.internal.pageSize.getWidth()
-  const pageH = doc.internal.pageSize.getHeight()
-  const margin = 15
-  const contentW = pageW - margin * 2
-  let y = 0
+  const W = doc.internal.pageSize.getWidth()
+  const H = doc.internal.pageSize.getHeight()
+  const M = 15 // margin
+  const CW = W - M * 2
+  let y = M
 
   // ── Fetch data ──
-  const startDate = new Date(year, month - 1, 1).toISOString()
-  const endDate = new Date(year, month, 0, 23, 59, 59, 999).toISOString()
+  const sDate = new Date(year, month - 1, 1).toISOString()
+  const eDate = new Date(year, month, 0, 23, 59, 59, 999).toISOString()
 
-  const allTransactions = await db.transactions.toArray()
-  const monthTx = allTransactions.filter(t => t.date >= startDate && t.date <= endDate)
-  const incomeTx = monthTx.filter(t => t.type === 'income')
-  const expenseTx = monthTx.filter(t => t.type === 'expense')
+  const allTx = await db.transactions.toArray()
+  const mTx = allTx.filter(t => t.date >= sDate && t.date <= eDate)
+  const incTx = mTx.filter(t => t.type === 'income')
+  const expTx = mTx.filter(t => t.type === 'expense')
 
-  const totalIncome = incomeTx.reduce((s, t) => s + t.amount, 0)
-  const totalExpenses = expenseTx.reduce((s, t) => s + t.amount, 0)
-  const balance = totalIncome - totalExpenses
+  const totInc = incTx.reduce((s, t) => s + t.amount, 0)
+  const totExp = expTx.reduce((s, t) => s + t.amount, 0)
+  const bal = totInc - totExp
 
   const accounts = await db.accounts.toArray()
   const budgets = await db.budgets.where({ month, year }).toArray()
-  const savingsGoals = await db.savingsGoals.toArray()
+  const savings = await db.savingsGoals.toArray()
   const debts = await db.debts.filter(d => d.status === 'active').toArray()
-  const serviceAccounts = await db.serviceAccounts.toArray()
-  const serviceBills = await db.serviceBills.toArray()
-  const monthBills = serviceBills.filter(b => b.dueDate >= startDate && b.dueDate <= endDate)
-  const recurringPayments = await db.recurringPayments.filter(r => r.isActive).toArray()
-
-  // Categories
+  const svcBills = (await db.serviceBills.toArray()).filter(b => b.dueDate >= sDate && b.dueDate <= eDate)
   const expCats = await db.expenseCategories.toArray()
   const incCats = await db.incomeCategories.toArray()
 
-  // Expense by category
-  const expByCat = new Map<string, number>()
-  for (const t of expenseTx) {
-    if (t.categoryId) expByCat.set(t.categoryId, (expByCat.get(t.categoryId) ?? 0) + t.amount)
-  }
-  const expenseByCategory = Array.from(expByCat.entries()).map(([catId, amount]) => {
-    const cat = expCats.find(c => c.id === catId)
-    return { name: cat?.name ?? 'Sin categoria', icon: cat?.icon ?? '?', amount }
-  }).sort((a, b) => b.amount - a.amount)
-
-  // Income by category
-  const incByCat = new Map<string, number>()
-  for (const t of incomeTx) {
-    if (t.categoryId) incByCat.set(t.categoryId, (incByCat.get(t.categoryId) ?? 0) + t.amount)
-  }
-  const incomeByCategory = Array.from(incByCat.entries()).map(([catId, amount]) => {
-    const cat = incCats.find(c => c.id === catId)
-    return { name: cat?.name ?? 'Sin categoria', icon: cat?.icon ?? '?', amount }
-  }).sort((a, b) => b.amount - a.amount)
+  // Aggregations
+  const paidBills = svcBills.filter(b => b.paid)
+  const unpaidBills = svcBills.filter(b => !b.paid)
+  const svcPaid = paidBills.reduce((s, b) => s + b.amount, 0)
+  const svcPend = unpaidBills.reduce((s, b) => s + b.amount, 0)
+  const debtRem = debts.reduce((s, d) => s + d.remainingAmount, 0)
+  const debtOrig = debts.reduce((s, d) => s + d.originalAmount, 0)
+  const savTarget = savings.reduce((s, g) => s + g.targetAmount, 0)
+  const savCurrent = savings.reduce((s, g) => s + g.currentAmount, 0)
+  const savPct = savTarget > 0 ? (savCurrent / savTarget) * 100 : 0
 
   // Previous month
-  const prevMonth = month === 1 ? 12 : month - 1
-  const prevYear = month === 1 ? year - 1 : year
-  const prevStart = new Date(prevYear, prevMonth - 1, 1).toISOString()
-  const prevEnd = new Date(prevYear, prevMonth, 0, 23, 59, 59, 999).toISOString()
-  const prevTx = allTransactions.filter(t => t.date >= prevStart && t.date <= prevEnd)
-  const prevIncome = prevTx.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
-  const prevExpenses = prevTx.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
+  const pm = month === 1 ? 12 : month - 1
+  const py = month === 1 ? year - 1 : year
+  const pS = new Date(py, pm - 1, 1).toISOString()
+  const pE = new Date(py, pm, 0, 23, 59, 59, 999).toISOString()
+  const pTx = allTx.filter(t => t.date >= pS && t.date <= pE)
+  const pInc = pTx.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0)
+  const pExp = pTx.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0)
+
+  // Category maps
+  const expByCat = new Map<string, number>()
+  for (const t of expTx) if (t.categoryId) expByCat.set(t.categoryId, (expByCat.get(t.categoryId) ?? 0) + t.amount)
+  const expCatsList = Array.from(expByCat.entries()).map(([id, amt]) => {
+    const c = expCats.find(x => x.id === id)
+    return { name: c?.name ?? 'Sin categoria', amount: amt }
+  }).sort((a, b) => b.amount - a.amount)
+
+  const incByCat = new Map<string, number>()
+  for (const t of incTx) if (t.categoryId) incByCat.set(t.categoryId, (incByCat.get(t.categoryId) ?? 0) + t.amount)
+  const incCatsList = Array.from(incByCat.entries()).map(([id, amt]) => {
+    const c = incCats.find(x => x.id === id)
+    return { name: c?.name ?? 'Sin categoria', amount: amt }
+  }).sort((a, b) => b.amount - a.amount)
 
   // ── Helpers ──
-  function setBg() {
-    doc.setFillColor(...COLORS.bg)
-    doc.rect(0, 0, pageW, pageH, 'F')
-  }
 
-  function drawCard(x: number, cardY: number, w: number, h: number, borderColor: [number, number, number]) {
-    // Card background
-    doc.setFillColor(...COLORS.cardBg)
-    doc.setDrawColor(...borderColor)
-    doc.setLineWidth(0.3)
-    doc.roundedRect(x, cardY, w, h, 2, 2, 'FD')
-    // Glow border
-    doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2])
-    doc.setLineWidth(0.5)
-    doc.roundedRect(x, cardY, w, h, 2, 2, 'S')
-  }
-
-  function drawText(text: string, x: number, textY: number, color: [number, number, number], size: number, style: 'normal' | 'bold' = 'normal') {
-    doc.setFont('SarasaMono', style)
+  function txt(text: string, x: number, ty: number, gray: number, size: number, bold = false, align: 'left' | 'center' | 'right' = 'left') {
+    doc.setFont('SM', bold ? 'bold' : 'normal')
     doc.setFontSize(size)
-    doc.setTextColor(...color)
-    doc.text(text, x, textY)
+    doc.setTextColor(gray)
+    doc.text(text, x, ty, { align })
   }
 
-  function drawLine(lineY: number, color: [number, number, number] = COLORS.border) {
-    doc.setDrawColor(...color)
-    doc.setLineWidth(0.2)
-    doc.line(margin, lineY, pageW - margin, lineY)
+  function line(ly: number, gray = LGRAY) {
+    doc.setDrawColor(gray)
+    doc.setLineWidth(0.15)
+    doc.line(M, ly, W - M, ly)
   }
 
-  function checkPageBreak(needed: number): boolean {
-    if (y + needed > pageH - margin) {
+  function need(mm: number) {
+    if (y + mm > H - M - 5) {
       doc.addPage()
-      setBg()
-      y = margin
-      return true
+      y = M
     }
-    return false
-  }
-
-  function pctChange(current: number, previous: number): string {
-    if (previous === 0) return current >= 0 ? '+0.0%' : '-0.0%'
-    const change = ((current - previous) / Math.abs(previous)) * 100
-    return `${change >= 0 ? '+' : ''}${change.toFixed(1)}%`
   }
 
   // ══════════════════════════════════════════════════════════════════
-  // PAGE 1 - COVER + SUMMARY
+  //  PAGE CONTENT
   // ══════════════════════════════════════════════════════════════════
 
-  setBg()
-
-  // Header decoration - top line
-  doc.setFillColor(...COLORS.cyan)
-  doc.rect(0, 0, pageW, 1.5, 'F')
-
-  // Logo / Title area
-  y = 30
-  drawText('KHORVEN', pageW / 2, y, COLORS.cyan, 28, 'bold')
-  doc.setFont('SarasaMono', 'normal')
-  doc.setFontSize(8)
-  doc.setTextColor(...COLORS.muted)
-  doc.text('FINANZAS PERSONALES v3.2', pageW / 2, y + 5, { align: 'center' })
-
-  // Decorative line
-  y += 12
-  doc.setFillColor(...COLORS.cyan)
-  doc.rect(margin + 30, y, pageW - margin * 2 - 60, 0.5, 'F')
-
-  // Month / Year title
-  y += 10
-  drawText(`Resumen Mensual`, pageW / 2, y, COLORS.text, 18, 'bold')
-  y += 7
-  drawText(`${MONTHS_ES[month - 1]} ${year}`, pageW / 2, y, COLORS.cyan, 14, 'bold')
-
-  // Generation date
-  y += 10
-  const genDate = new Date()
-  drawText(`Generado: ${genDate.getDate().toString().padStart(2, '0')}/${(genDate.getMonth() + 1).toString().padStart(2, '0')}/${genDate.getFullYear()} ${genDate.getHours().toString().padStart(2, '0')}:${genDate.getMinutes().toString().padStart(2, '0')}`, pageW / 2, y, COLORS.muted, 8, 'normal')
-
-  // ── Summary Cards ──
-  y += 16
-  const cardW = (contentW - 8) / 3
-  const cardH = 28
-
-  // Income card
-  drawCard(margin, y, cardW, cardH, COLORS.green)
-  drawText('INGRESOS', margin + cardW / 2, y + 7, COLORS.muted, 7, 'normal')
-  drawText(formatCurrency(totalIncome), margin + cardW / 2, y + 15, COLORS.green, 11, 'bold')
-  drawText(pctChange(totalIncome, prevIncome), margin + cardW / 2, y + 21, prevIncome > 0 && totalIncome >= prevIncome ? COLORS.green : COLORS.pink, 7, 'normal')
-
-  // Expenses card
-  const card2X = margin + cardW + 4
-  drawCard(card2X, y, cardW, cardH, COLORS.pink)
-  drawText('GASTOS', card2X + cardW / 2, y + 7, COLORS.muted, 7, 'normal')
-  drawText(formatCurrency(totalExpenses), card2X + cardW / 2, y + 15, COLORS.pink, 11, 'bold')
-  drawText(pctChange(totalExpenses, prevExpenses), card2X + cardW / 2, y + 21, totalExpenses <= prevExpenses ? COLORS.green : COLORS.pink, 7, 'normal')
-
-  // Balance card
-  const card3X = margin + (cardW + 4) * 2
-  drawCard(card3X, y, cardW, cardH, COLORS.cyan)
-  drawText('BALANCE', card3X + cardW / 2, y + 7, COLORS.muted, 7, 'normal')
-  drawText(formatCurrency(balance), card3X + cardW / 2, y + 15, balance >= 0 ? COLORS.cyan : COLORS.pink, 11, 'bold')
-  drawText(balance >= 0 ? 'Positivo' : 'Negativo', card3X + cardW / 2, y + 21, balance >= 0 ? COLORS.green : COLORS.pink, 7, 'normal')
-
-  y += cardH + 10
-
-  // ── Services & Debts Summary ──
-  const halfW = (contentW - 6) / 2
-  const paidBills = monthBills.filter(b => b.paid)
-  const unpaidBills = monthBills.filter(b => !b.paid)
-  const servicePaid = paidBills.reduce((s, b) => s + b.amount, 0)
-  const servicePending = unpaidBills.reduce((s, b) => s + b.amount, 0)
-  const totalDebtRemaining = debts.reduce((s, d) => s + d.remainingAmount, 0)
-  const totalDebtOriginal = debts.reduce((s, d) => s + d.originalAmount, 0)
-
-  // Services Card
-  const svcCardH = 38
-  drawCard(margin, y, halfW, svcCardH, COLORS.orange)
-  drawText('SERVICIOS', margin + 5, y + 7, COLORS.orange, 9, 'bold')
-  drawText(`Total: ${formatCurrency(servicePaid + servicePending)}`, margin + 5, y + 14, COLORS.text, 8, 'normal')
-  drawText(`Pagado: ${formatCurrency(servicePaid)}`, margin + 5, y + 20, COLORS.green, 7, 'normal')
-  drawText(`Pendiente: ${formatCurrency(servicePending)}`, margin + 5, y + 26, COLORS.pink, 7, 'normal')
-  drawText(`${paidBills.length} pagadas / ${unpaidBills.length} pendientes`, margin + 5, y + 32, COLORS.muted, 6, 'normal')
-
-  // Debts Card
-  drawCard(margin + halfW + 6, y, halfW, svcCardH, COLORS.pink)
-  drawText('DEUDAS', margin + halfW + 11, y + 7, COLORS.pink, 9, 'bold')
-  drawText(`Total: ${formatCurrency(totalDebtOriginal)}`, margin + halfW + 11, y + 14, COLORS.text, 8, 'normal')
-  drawText(`Restante: ${formatCurrency(totalDebtRemaining)}`, margin + halfW + 11, y + 20, COLORS.orange, 7, 'normal')
-  drawText(`Pagado: ${formatCurrency(totalDebtOriginal - totalDebtRemaining)}`, margin + halfW + 11, y + 26, COLORS.green, 7, 'normal')
-  drawText(`${debts.length} deuda${debts.length !== 1 ? 's' : ''} activa${debts.length !== 1 ? 's' : ''}`, margin + halfW + 11, y + 32, COLORS.muted, 6, 'normal')
-
-  y += svcCardH + 8
-
-  // ── Savings Summary ──
-  const totalSavingsTarget = savingsGoals.reduce((s, g) => s + g.targetAmount, 0)
-  const totalSavingsCurrent = savingsGoals.reduce((s, g) => s + g.currentAmount, 0)
-  const savingsRate = totalSavingsTarget > 0 ? (totalSavingsCurrent / totalSavingsTarget) * 100 : 0
-
-  drawCard(margin, y, contentW, 20, COLORS.purple)
-  drawText('AHORROS', margin + 5, y + 7, COLORS.purple, 9, 'bold')
-  drawText(`Actual: ${formatCurrency(totalSavingsCurrent)}`, margin + 5, y + 14, COLORS.text, 8, 'normal')
-  drawText(`Meta: ${formatCurrency(totalSavingsTarget)}`, margin + 55, y + 14, COLORS.muted, 8, 'normal')
-  drawText(`Progreso: ${savingsRate.toFixed(1)}%`, margin + 110, y + 14, savingsRate >= 50 ? COLORS.green : COLORS.orange, 8, 'normal')
-  // Savings bar
-  const barX = margin + 5
-  const barY2 = y + 17
-  const barW2 = contentW - 10
-  doc.setFillColor(40, 40, 70)
-  doc.roundedRect(barX, barY2, barW2, 1.5, 0.5, 0.5, 'F')
-  const fillW = Math.min(savingsRate, 100) / 100 * barW2
-  doc.setFillColor(...COLORS.purple)
-  doc.roundedRect(barX, barY2, fillW, 1.5, 0.5, 0.5, 'F')
-
-  y += 26
-
-  // ══════════════════════════════════════════════════════════════════
-  // PAGE 2 - EXPENSES BY CATEGORY + ACCOUNTS
-  // ══════════════════════════════════════════════════════════════════
-
-  // ── Expense by Category ──
-  checkPageBreak(60)
-  drawLine(y, COLORS.cyan)
+  // Header
+  txt('KHORVEN Finanzas Personales', M, y, BLK, 14, true)
+  y += 5
+  txt(`Resumen Mensual - ${MONTHS_ES[month - 1]} ${year}`, M, y, DGRAY, 11)
   y += 4
-  drawText('GASTOS POR CATEGORIA', margin, y, COLORS.pink, 10, 'bold')
+  const now = new Date()
+  txt(`Generado: ${now.getDate().toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}/${now.getFullYear()}`, M, y, DGRAY, 7)
+  y += 4
+  line(y, BLK)
   y += 6
 
-  if (expenseByCategory.length > 0) {
-    // Table header
-    drawText('Categoria', margin, y, COLORS.muted, 7, 'normal')
-    drawText('Monto', pageW - margin, y, COLORS.muted, 7, 'normal')
-    y += 1
-    drawLine(y, COLORS.border)
-    y += 4
+  // ── Resumen ──
+  txt('RESUMEN', M, y, BLK, 10, true)
+  y += 5
 
-    const maxExpCat = Math.max(...expenseByCategory.map(c => c.amount), 1)
-    for (const cat of expenseByCategory.slice(0, 12)) {
-      checkPageBreak(10)
-      // Bar
-      const barWidth = (cat.amount / maxExpCat) * (contentW * 0.5)
-      doc.setFillColor(...COLORS.pink)
-      doc.roundedRect(margin, y - 2.5, barWidth, 3, 0.5, 0.5, 'F')
+  const colW = CW / 3
+  const rowH = 14
 
-      drawText(`${cat.icon} ${cat.name}`, margin + 2, y, COLORS.text, 7, 'normal')
-      drawText(formatCurrency(cat.amount), pageW - margin, y, COLORS.pink, 7, 'bold')
-      y += 5
+  // 3-column table: Ingresos | Gastos | Balance
+  doc.setDrawColor(LGRAY)
+  doc.setLineWidth(0.2)
+  for (let i = 0; i < 3; i++) {
+    doc.rect(M + colW * i, y, colW, rowH)
+  }
+  txt('Ingresos', M + colW * 0.5, y + 4, DGRAY, 7, false, 'center')
+  txt(formatCurrency(totInc), M + colW * 0.5, y + 10, BLK, 9, true, 'center')
+  txt('Gastos', M + colW * 1.5, y + 4, DGRAY, 7, false, 'center')
+  txt(formatCurrency(totExp), M + colW * 1.5, y + 10, BLK, 9, true, 'center')
+  txt('Balance', M + colW * 2.5, y + 4, DGRAY, 7, false, 'center')
+  txt(formatCurrency(bal), M + colW * 2.5, y + 10, bal >= 0 ? BLK : BLK, 9, true, 'center')
+
+  y += rowH + 3
+
+  // vs mes anterior
+  const pctInc = pInc > 0 ? ((totInc - pInc) / pInc * 100) : 0
+  const pctExp = pExp > 0 ? ((totExp - pExp) / pExp * 100) : 0
+  txt(`vs mes anterior:  Ingresos ${pctInc >= 0 ? '+' : ''}${pctInc.toFixed(1)}%   Gastos ${pctExp >= 0 ? '+' : ''}${pctExp.toFixed(1)}%`, M, y, DGRAY, 7)
+  y += 6
+
+  // ── Servicios / Deudas / Ahorros ──
+  line(y)
+  y += 5
+  txt('SERVICIOS', M, y, BLK, 9, true)
+  y += 4
+  txt(`Pagado: ${formatCurrency(svcPaid)} (${paidBills.length})   Pendiente: ${formatCurrency(svcPend)} (${unpaidBills.length})`, M, y, DGRAY, 7)
+  y += 5
+
+  txt('DEUDAS', M, y, BLK, 9, true)
+  y += 4
+  txt(`Total: ${formatCurrency(debtOrig)}   Restante: ${formatCurrency(debtRem)}   Pagado: ${formatCurrency(debtOrig - debtRem)}   Activas: ${debts.length}`, M, y, DGRAY, 7)
+  y += 5
+
+  txt('AHORROS', M, y, BLK, 9, true)
+  y += 4
+  txt(`Actual: ${formatCurrency(savCurrent)}   Meta: ${formatCurrency(savTarget)}   Progreso: ${savPct.toFixed(1)}%`, M, y, DGRAY, 7)
+  y += 6
+
+  // ── Gastos por Categoria ──
+  need(30)
+  line(y)
+  y += 5
+  txt('GASTOS POR CATEGORIA', M, y, BLK, 9, true)
+  y += 5
+
+  if (expCatsList.length > 0) {
+    const maxAmt = Math.max(...expCatsList.map(c => c.amount), 1)
+    for (const c of expCatsList.slice(0, 10)) {
+      need(5)
+      // Simple bar using grayscale fill
+      const barW = (c.amount / maxAmt) * 60
+      doc.setFillColor(LGRAY)
+      doc.rect(M, y - 2.5, barW, 2.5, 'F')
+      txt(c.name, M + 2, y, BLK, 7)
+      txt(formatCurrency(c.amount), W - M, y, BLK, 7, true, 'right')
+      y += 4.5
     }
   } else {
-    drawText('Sin gastos este mes', margin, y, COLORS.muted, 8, 'normal')
-    y += 6
+    txt('Sin gastos este mes', M, y, DGRAY, 7)
+    y += 5
   }
+  y += 3
 
-  y += 4
+  // ── Ingresos por Categoria ──
+  need(30)
+  line(y)
+  y += 5
+  txt('INGRESOS POR CATEGORIA', M, y, BLK, 9, true)
+  y += 5
 
-  // ── Income by Category ──
-  checkPageBreak(60)
-  drawLine(y, COLORS.green)
-  y += 4
-  drawText('INGRESOS POR CATEGORIA', margin, y, COLORS.green, 10, 'bold')
-  y += 6
-
-  if (incomeByCategory.length > 0) {
-    drawText('Categoria', margin, y, COLORS.muted, 7, 'normal')
-    drawText('Monto', pageW - margin, y, COLORS.muted, 7, 'normal')
-    y += 1
-    drawLine(y, COLORS.border)
-    y += 4
-
-    const maxIncCat = Math.max(...incomeByCategory.map(c => c.amount), 1)
-    for (const cat of incomeByCategory.slice(0, 12)) {
-      checkPageBreak(10)
-      const barWidth = (cat.amount / maxIncCat) * (contentW * 0.5)
-      doc.setFillColor(...COLORS.green)
-      doc.roundedRect(margin, y - 2.5, barWidth, 3, 0.5, 0.5, 'F')
-
-      drawText(`${cat.icon} ${cat.name}`, margin + 2, y, COLORS.text, 7, 'normal')
-      drawText(formatCurrency(cat.amount), pageW - margin, y, COLORS.green, 7, 'bold')
-      y += 5
+  if (incCatsList.length > 0) {
+    const maxAmt = Math.max(...incCatsList.map(c => c.amount), 1)
+    for (const c of incCatsList.slice(0, 10)) {
+      need(5)
+      const barW = (c.amount / maxAmt) * 60
+      doc.setFillColor(LGRAY)
+      doc.rect(M, y - 2.5, barW, 2.5, 'F')
+      txt(c.name, M + 2, y, BLK, 7)
+      txt(formatCurrency(c.amount), W - M, y, BLK, 7, true, 'right')
+      y += 4.5
     }
   } else {
-    drawText('Sin ingresos este mes', margin, y, COLORS.muted, 8, 'normal')
-    y += 6
+    txt('Sin ingresos este mes', M, y, DGRAY, 7)
+    y += 5
   }
+  y += 3
 
-  y += 6
+  // ── Cuentas ──
+  need(25)
+  line(y)
+  y += 5
+  txt('CUENTAS BANCARIAS', M, y, BLK, 9, true)
+  y += 5
 
-  // ── Accounts Summary ──
-  checkPageBreak(50)
-  drawLine(y, COLORS.cyan)
-  y += 4
-  drawText('CUENTAS BANCARIAS', margin, y, COLORS.cyan, 10, 'bold')
-  y += 6
-
-  const typeMap: Record<string, { icon: string; label: string }> = {
-    savings: { icon: '🏦', label: 'Ahorro' },
-    checking: { icon: '💳', label: 'Corriente' },
-    cash: { icon: '💵', label: 'Efectivo' },
-    credit: { icon: '💰', label: 'Credito' },
+  const typeLabels: Record<string, string> = {
+    savings: 'Ahorro', checking: 'Corriente', cash: 'Efectivo', credit: 'Credito',
   }
 
   if (accounts.length > 0) {
-    drawText('Cuenta', margin, y, COLORS.muted, 7, 'normal')
-    drawText('Tipo', margin + 60, y, COLORS.muted, 7, 'normal')
-    drawText('Balance', pageW - margin, y, COLORS.muted, 7, 'normal')
-    y += 1
-    drawLine(y, COLORS.border)
-    y += 4
+    for (const a of accounts) {
+      need(5)
+      txt(`${a.name} (${typeLabels[a.type] ?? a.type})`, M, y, BLK, 7)
+      txt(formatCurrency(a.balance), W - M, y, BLK, 7, true, 'right')
+      y += 4.5
+    }
+  } else {
+    txt('Sin cuentas', M, y, DGRAY, 7)
+    y += 5
+  }
+  y += 3
 
-    for (const acct of accounts) {
-      checkPageBreak(8)
-      const info = typeMap[acct.type] ?? { icon: '💰', label: acct.type }
-      drawText(`${info.icon} ${acct.name}`, margin, y, COLORS.text, 7, 'normal')
-      drawText(info.label, margin + 60, y, COLORS.muted, 7, 'normal')
-      const balColor = acct.balance >= 0 ? COLORS.green : COLORS.pink
-      drawText(formatCurrency(acct.balance), pageW - margin, y, balColor, 7, 'bold')
+  // ── Presupuestos ──
+  need(25)
+  line(y)
+  y += 5
+  txt('PRESUPUESTOS', M, y, BLK, 9, true)
+  y += 5
+
+  if (budgets.length > 0) {
+    for (const b of budgets) {
+      need(6)
+      const cat = expCats.find(c => c.id === b.categoryId)
+      const spent = expTx.filter(t => t.categoryId === b.categoryId).reduce((s, t) => s + t.amount, 0)
+      const pct = b.amount > 0 ? (spent / b.amount) * 100 : 0
+      const catName = cat?.name ?? 'Sin categoria'
+
+      txt(catName, M, y, BLK, 7)
+      txt(`${formatCurrency(spent)} / ${formatCurrency(b.amount)}`, M + 55, y, DGRAY, 7)
+      txt(`${pct.toFixed(0)}%`, W - M, y, BLK, 7, true, 'right')
+
+      // Simple progress bar
+      const barMax = CW - 10
+      const barFill = Math.min(pct, 100) / 100 * barMax
+      doc.setFillColor(LGRAY)
+      doc.rect(M, y + 1.5, barMax, 1, 'F')
+      doc.setFillColor(pct > 100 ? DGRAY : BLK)
+      doc.rect(M, y + 1.5, barFill, 1, 'F')
+
       y += 5
     }
   } else {
-    drawText('Sin cuentas registradas', margin, y, COLORS.muted, 8, 'normal')
-    y += 6
+    txt('Sin presupuestos', M, y, DGRAY, 7)
+    y += 5
   }
+  y += 3
 
-  y += 6
+  // ── Transacciones ──
+  need(25)
+  line(y)
+  y += 5
+  txt('TRANSACCIONES DEL MES', M, y, BLK, 9, true)
+  y += 5
 
-  // ── Budget Summary ──
-  checkPageBreak(50)
-  drawLine(y, COLORS.yellow)
-  y += 4
-  drawText('PRESUPUESTOS', margin, y, COLORS.yellow, 10, 'bold')
-  y += 6
-
-  if (budgets.length > 0) {
-    drawText('Categoria', margin, y, COLORS.muted, 7, 'normal')
-    drawText('Gastado', margin + 65, y, COLORS.muted, 7, 'normal')
-    drawText('Presupuesto', margin + 100, y, COLORS.muted, 7, 'normal')
-    drawText('%', pageW - margin, y, COLORS.muted, 7, 'normal')
-    y += 1
-    drawLine(y, COLORS.border)
-    y += 4
-
-    for (const budget of budgets) {
-      checkPageBreak(10)
-      const cat = expCats.find(c => c.id === budget.categoryId)
-      const catName = cat?.name ?? 'Sin categoria'
-      const spent = expenseTx
-        .filter(t => t.categoryId === budget.categoryId)
-        .reduce((s, t) => s + t.amount, 0)
-      const pct = budget.amount > 0 ? (spent / budget.amount) * 100 : 0
-
-      drawText(catName, margin, y, COLORS.text, 7, 'normal')
-      drawText(formatCurrency(spent), margin + 65, y, pct > 100 ? COLORS.pink : COLORS.text, 7, 'normal')
-      drawText(formatCurrency(budget.amount), margin + 100, y, COLORS.muted, 7, 'normal')
-
-      // Percentage badge
-      const pctColor = pct > 100 ? COLORS.pink : pct >= 75 ? COLORS.orange : COLORS.green
-      drawText(`${pct.toFixed(0)}%`, pageW - margin, y, pctColor, 7, 'bold')
-
-      // Progress bar
-      const barMaxW = contentW - 10
-      const barFill = Math.min(pct, 100) / 100 * barMaxW
-      doc.setFillColor(40, 40, 70)
-      doc.roundedRect(margin, y + 1.5, barMaxW, 1.5, 0.5, 0.5, 'F')
-      doc.setFillColor(pctColor[0], pctColor[1], pctColor[2])
-      doc.roundedRect(margin, y + 1.5, barFill, 1.5, 0.5, 0.5, 'F')
-
-      y += 6
-    }
-  } else {
-    drawText('Sin presupuestos este mes', margin, y, COLORS.muted, 8, 'normal')
-    y += 6
-  }
-
-  y += 6
-
-  // ══════════════════════════════════════════════════════════════════
-  // PAGE 3 - RECENT TRANSACTIONS
-  // ══════════════════════════════════════════════════════════════════
-
-  checkPageBreak(50)
-  drawLine(y, COLORS.cyan)
-  y += 4
-  drawText('TRANSACCIONES RECIENTES', margin, y, COLORS.cyan, 10, 'bold')
-  y += 6
-
-  if (monthTx.length > 0) {
+  if (mTx.length > 0) {
     // Table header
-    drawText('Fecha', margin, y, COLORS.muted, 6, 'normal')
-    drawText('Descripcion', margin + 25, y, COLORS.muted, 6, 'normal')
-    drawText('Tipo', margin + 110, y, COLORS.muted, 6, 'normal')
-    drawText('Monto', pageW - margin, y, COLORS.muted, 6, 'normal')
-    y += 1
-    drawLine(y, COLORS.border)
-    y += 4
+    doc.setFillColor(LGRAY)
+    doc.rect(M, y - 3, CW, 4, 'F')
+    txt('Fecha', M + 1, y, BLK, 6, true)
+    txt('Descripcion', M + 22, y, BLK, 6, true)
+    txt('Tipo', M + 110, y, BLK, 6, true)
+    txt('Monto', W - M, y, BLK, 6, true, 'right')
+    y += 3
 
-    const recent = [...monthTx].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 25)
+    const recent = [...mTx].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 30)
     for (const tx of recent) {
-      checkPageBreak(8)
-
-      // Date
-      const txDate = new Date(tx.date)
-      const dateStr = `${txDate.getDate().toString().padStart(2, '0')}/${(txDate.getMonth() + 1).toString().padStart(2, '0')}`
-      drawText(dateStr, margin, y, COLORS.muted, 6, 'normal')
-
-      // Description (truncated)
-      const desc = tx.description.length > 30 ? tx.description.substring(0, 30) + '...' : tx.description
-      drawText(desc, margin + 25, y, COLORS.text, 6, 'normal')
-
-      // Type
-      const typeLabel = tx.type === 'income' ? 'Ing' : tx.type === 'expense' ? 'Gas' : 'Tra'
-      const typeColor = tx.type === 'income' ? COLORS.green : tx.type === 'expense' ? COLORS.pink : COLORS.cyan
-      drawText(typeLabel, margin + 110, y, typeColor, 6, 'bold')
-
-      // Amount
-      const amtColor = tx.type === 'income' ? COLORS.green : tx.type === 'expense' ? COLORS.pink : COLORS.text
-      const amtSign = tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''
-      drawText(`${amtSign}${formatCurrency(tx.amount)}`, pageW - margin, y, amtColor, 6, 'bold')
-
-      y += 4.5
+      need(5)
+      const d = new Date(tx.date)
+      txt(`${d.getDate().toString().padStart(2, '0')}/${(d.getMonth() + 1).toString().padStart(2, '0')}`, M + 1, y, DGRAY, 6)
+      const desc = tx.description.length > 28 ? tx.description.substring(0, 28) + '...' : tx.description
+      txt(desc, M + 22, y, BLK, 6)
+      txt(tx.type === 'income' ? 'Ingreso' : tx.type === 'expense' ? 'Gasto' : 'Transf.', M + 110, y, DGRAY, 6)
+      const sign = tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''
+      txt(`${sign}${formatCurrency(tx.amount)}`, W - M, y, BLK, 6, true, 'right')
+      y += 4
     }
 
-    drawLine(y, COLORS.border)
-    y += 4
-    drawText(`Total: ${monthTx.length} transacciones`, margin, y, COLORS.muted, 7, 'normal')
+    y += 2
+    txt(`Total: ${mTx.length} transacciones`, M, y, DGRAY, 7)
   } else {
-    drawText('Sin transacciones este mes', margin, y, COLORS.muted, 8, 'normal')
+    txt('Sin transacciones este mes', M, y, DGRAY, 7)
   }
 
-  // ── Footer on each page ──
-  const totalPages = doc.getNumberOfPages()
-  for (let i = 1; i <= totalPages; i++) {
+  // ── Footer ──
+  const pages = doc.getNumberOfPages()
+  for (let i = 1; i <= pages; i++) {
     doc.setPage(i)
-    // Bottom line
-    doc.setFillColor(...COLORS.cyan)
-    doc.rect(0, pageH - 1.5, pageW, 1.5, 'F')
-    // Footer text
-    doc.setFont('SarasaMono', 'normal')
+    doc.setFont('SM', 'normal')
     doc.setFontSize(6)
-    doc.setTextColor(...COLORS.muted)
-    doc.text('KHORVEN Finanzas Personales v3.2.0', margin, pageH - 5)
-    doc.text(`Pagina ${i} de ${totalPages}`, pageW - margin, pageH - 5, { align: 'right' })
+    doc.setTextColor(DGRAY)
+    doc.text('KHORVEN Finanzas Personales v3.2.0', M, H - 8)
+    doc.text(`${MONTHS_ES[month - 1]} ${year}  -  Pagina ${i}/${pages}`, W - M, H - 8, { align: 'right' })
+    doc.setDrawColor(LGRAY)
+    doc.setLineWidth(0.15)
+    doc.line(M, H - 12, W - M, H - 12)
   }
 
-  // Save
-  const fileName = `khorven-resumen-${MONTHS_ES[month - 1].toLowerCase()}-${year}.pdf`
-  doc.save(fileName)
+  doc.save(`khorven-resumen-${MONTHS_ES[month - 1].toLowerCase()}-${year}.pdf`)
 }
