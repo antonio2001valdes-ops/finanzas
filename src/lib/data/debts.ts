@@ -1,4 +1,5 @@
 import { db, generateId, nowISO, type Debt, type DebtPayment } from '@/lib/db-client';
+import { transactionService } from './transactions';
 
 export const debtService = {
   async getAll(): Promise<Debt[]> {
@@ -24,27 +25,64 @@ export const debtService = {
   },
 
   async delete(id: string): Promise<void> {
-    await db.transaction('rw', [db.debts, db.debtPayments], async () => {
+    await db.transaction('rw', [db.debts, db.debtPayments, db.transactions, db.accounts], async () => {
+      // Find and revert transactions linked to this debt's payments
+      const payments = await db.debtPayments.where('debtId').equals(id).toArray();
+      for (const payment of payments) {
+        const linkedTx = await db.transactions.toArray();
+        const txToDelete = linkedTx.find((t) => t.sourceDebtPaymentId === payment.id);
+        if (txToDelete) {
+          // Restore account balance
+          if (txToDelete.accountId) {
+            const acct = await db.accounts.get(txToDelete.accountId);
+            if (acct) {
+              await db.accounts.update(txToDelete.accountId, {
+                balance: acct.balance + txToDelete.amount,
+                updatedAt: nowISO(),
+              });
+            }
+          }
+          await db.transactions.delete(txToDelete.id);
+        }
+      }
       await db.debtPayments.where('debtId').equals(id).delete();
       await db.debts.delete(id);
     });
   },
 
-  async addPayment(debtId: string, amount: number, description?: string): Promise<DebtPayment> {
+  async addPayment(debtId: string, amount: number, accountId: string, description?: string): Promise<DebtPayment> {
+    const debt = await db.debts.get(debtId);
+    if (!debt) throw new Error('Deuda no encontrada');
+
+    // Validate payment amount
+    if (amount <= 0) throw new Error('El monto debe ser mayor a 0');
+    if (amount > debt.remainingAmount) {
+      throw new Error(`El monto excede la deuda restante ($${debt.remainingAmount.toLocaleString('es-CL')})`);
+    }
+
+    // Validate account balance
+    const account = await db.accounts.get(accountId);
+    if (!account) throw new Error('Cuenta no encontrada');
+    if (account.balance < amount) {
+      throw new Error(`Saldo insuficiente. Disponible: $${account.balance.toLocaleString('es-CL')}, Monto: $${amount.toLocaleString('es-CL')}`);
+    }
+
+    const paymentId = generateId();
     const payment: DebtPayment = {
-      id: generateId(),
+      id: paymentId,
       debtId,
       amount,
       description,
       createdAt: nowISO(),
     };
 
+    // Create debt payment record and update debt
     await db.transaction('rw', [db.debtPayments, db.debts], async () => {
       await db.debtPayments.add(payment);
 
-      const debt = await db.debts.get(debtId);
-      if (debt) {
-        const newRemaining = debt.remainingAmount - amount;
+      const currentDebt = await db.debts.get(debtId);
+      if (currentDebt) {
+        const newRemaining = currentDebt.remainingAmount - amount;
         await db.debts.update(debtId, {
           remainingAmount: Math.max(0, newRemaining),
           status: newRemaining <= 0 ? 'paid' : 'active',
@@ -53,6 +91,44 @@ export const debtService = {
       }
     });
 
+    // Create expense transaction (updates account balance automatically)
+    await transactionService.create({
+      type: 'expense',
+      amount,
+      description: `Deuda: ${debt.name}${description ? ` - ${description}` : ''}`,
+      categoryType: 'expense',
+      accountId,
+      isRecurring: false,
+      tags: 'deuda',
+      sourceDebtPaymentId: paymentId,
+      date: nowISO(),
+    });
+
     return payment;
+  },
+
+  async deletePayment(paymentId: string): Promise<void> {
+    const payment = await db.debtPayments.get(paymentId);
+    if (!payment) return;
+
+    // Find and delete the linked transaction (restores account balance)
+    const allTransactions = await db.transactions.toArray();
+    const linkedTx = allTransactions.find((t) => t.sourceDebtPaymentId === paymentId);
+    if (linkedTx) {
+      await transactionService.delete(linkedTx.id);
+    }
+
+    // Restore debt remaining amount
+    await db.transaction('rw', [db.debtPayments, db.debts], async () => {
+      const debt = await db.debts.get(payment.debtId);
+      if (debt) {
+        await db.debts.update(payment.debtId, {
+          remainingAmount: debt.remainingAmount + payment.amount,
+          status: 'active',
+          updatedAt: nowISO(),
+        });
+      }
+      await db.debtPayments.delete(paymentId);
+    });
   },
 };

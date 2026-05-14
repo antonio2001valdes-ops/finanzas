@@ -280,6 +280,11 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
 
   const onConfirmPay = async () => {
     if (!selectedRecurring || !payAccountId) return
+    const selectedAcct = accounts?.find((a) => a.id === payAccountId)
+    if (selectedAcct && selectedAcct.balance < selectedRecurring.amount) {
+      toast.error('Saldo insuficiente en la cuenta seleccionada')
+      return
+    }
     setPaying(true)
     try {
       await recurringService.pay(selectedRecurring.id, payAccountId)
@@ -922,6 +927,23 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
                   <p className="text-xs text-muted-foreground mt-1">No hay cuentas registradas.</p>
                 )}
               </div>
+
+              {/* Saldo insuficiente warning */}
+              {(() => {
+                const selectedAcct = accounts?.find((a) => a.id === payAccountId)
+                const insufficient = selectedAcct && selectedRecurring && selectedAcct.balance < selectedRecurring.amount
+                return insufficient ? (
+                  <div className="flex items-center gap-2 p-3 rounded-lg border border-neon-pink/30 bg-neon-pink/10">
+                    <AlertTriangle className="size-4 text-neon-pink shrink-0" />
+                    <div>
+                      <p className="text-xs font-semibold text-neon-pink">Saldo insuficiente</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Disponible: {formatCurrency(selectedAcct?.balance ?? 0)} • Necesitas: {formatCurrency(selectedRecurring?.amount ?? 0)}
+                      </p>
+                    </div>
+                  </div>
+                ) : null
+              })()}
             </div>
           )}
 
@@ -935,8 +957,8 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
             </Button>
             <Button
               onClick={onConfirmPay}
-              disabled={paying || !payAccountId}
-              className="bg-neon-green/20 border border-neon-green/50 text-neon-green hover:bg-neon-green/30"
+              disabled={paying || !payAccountId || (() => { const a = accounts?.find((x) => x.id === payAccountId); return !!a && !!selectedRecurring && a.balance < selectedRecurring.amount })()}
+              className="bg-neon-green/20 border border-neon-green/50 text-neon-green hover:bg-neon-green/30 disabled:opacity-50"
             >
               <Banknote className="size-4 mr-2" />
               {paying ? 'Procesando...' : 'Confirmar Pago'}

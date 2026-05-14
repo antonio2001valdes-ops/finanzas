@@ -11,15 +11,23 @@ import {
   Trash2,
   Banknote,
   Loader2,
+  AlertTriangle,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { debtService, useAsyncData } from '@/lib/data'
+import { debtService, accountService, useAsyncData } from '@/lib/data'
 import { formatCurrency, formatDate, DEBT_STATUS } from '@/lib/finance-utils'
-import type { Debt, DebtPayment } from '@/lib/db-client'
+import type { Debt, DebtPayment, Account } from '@/lib/db-client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -46,13 +54,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import {
   Form,
   FormField,
@@ -120,6 +121,10 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
   const [submittingDebt, setSubmittingDebt] = useState(false)
   const [submittingPayment, setSubmittingPayment] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  // Account selection for payment
+  const [paymentAccountId, setPaymentAccountId] = useState<string>('')
+  const { data: accounts } = useAsyncData<Account[]>(() => accountService.getAll(), [])
 
   // ─── Debt Form ──────────────────────────────────────────────────
 
@@ -220,19 +225,25 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
       amount: debt.monthlyPayment || 0,
       description: '',
     })
+    setPaymentAccountId(accounts?.[0]?.id ?? '')
     setPaymentDialogOpen(true)
   }
 
   const onSubmitPayment = async (data: PaymentForm) => {
-    if (!selectedDebt) return
+    if (!selectedDebt || !paymentAccountId) return
+    const selectedAcct = accounts?.find((a) => a.id === paymentAccountId)
+    if (selectedAcct && selectedAcct.balance < data.amount) {
+      toast.error('Saldo insuficiente en la cuenta seleccionada')
+      return
+    }
     setSubmittingPayment(true)
     try {
-      await debtService.addPayment(selectedDebt.id, data.amount, data.description)
+      await debtService.addPayment(selectedDebt.id, data.amount, paymentAccountId, data.description)
       toast.success(`Pago de ${formatCurrency(data.amount)} registrado`)
       setPaymentDialogOpen(false)
       refetch()
-    } catch {
-      toast.error('Error al registrar el pago')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al registrar el pago')
     } finally {
       setSubmittingPayment(false)
     }
@@ -726,6 +737,47 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
                 )}
               />
 
+              {/* Account selection */}
+              <div className="space-y-2">
+                <Label>Cuenta de Pago</Label>
+                <Select
+                  value={paymentAccountId}
+                  onValueChange={setPaymentAccountId}
+                >
+                  <SelectTrigger className="border-neon-green/20 focus:border-neon-green/50 w-full">
+                    <SelectValue placeholder="Seleccionar cuenta" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts?.map((acct) => (
+                      <SelectItem key={acct.id} value={acct.id}>
+                        {acct.icon} {acct.name} ({formatCurrency(acct.balance)})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {(!accounts || accounts.length === 0) && (
+                  <p className="text-xs text-muted-foreground">No hay cuentas registradas. Crea una primero.</p>
+                )}
+              </div>
+
+              {/* Saldo insuficiente warning */}
+              {(() => {
+                const selectedAcct = accounts?.find((a) => a.id === paymentAccountId)
+                const payAmount = paymentForm.watch('amount') || 0
+                const insufficient = selectedAcct && selectedAcct.balance < payAmount
+                return insufficient ? (
+                  <div className="flex items-center gap-2 p-3 rounded-lg border border-neon-pink/30 bg-neon-pink/10">
+                    <AlertTriangle className="size-4 text-neon-pink shrink-0" />
+                    <div>
+                      <p className="text-xs font-semibold text-neon-pink">Saldo insuficiente</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Disponible: {formatCurrency(selectedAcct?.balance ?? 0)} • Necesitas: {formatCurrency(payAmount)}
+                      </p>
+                    </div>
+                  </div>
+                ) : null
+              })()}
+
               <DialogFooter>
                 <Button
                   type="button"
@@ -736,8 +788,8 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
                 </Button>
                 <Button
                   type="submit"
-                  disabled={submittingPayment}
-                  className="bg-neon-green/20 border border-neon-green/50 text-neon-green hover:bg-neon-green/30"
+                  disabled={submittingPayment || !paymentAccountId}
+                  className="bg-neon-green/20 border border-neon-green/50 text-neon-green hover:bg-neon-green/30 disabled:opacity-50"
                 >
                   <Banknote className="size-4 mr-2" />
                   {submittingPayment ? 'Registrando...' : 'Registrar Pago'}

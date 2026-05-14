@@ -50,6 +50,7 @@ export interface Transaction {
   splitIndex?: number;
   sourceBillId?: string;
   sourceRecurringId?: string;
+  sourceDebtPaymentId?: string;
   date: string;
   createdAt: string;
   updatedAt: string;

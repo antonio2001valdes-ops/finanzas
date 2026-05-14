@@ -74,6 +74,13 @@ export const recurringService = {
     const recurring = await db.recurringPayments.get(id);
     if (!recurring) throw new Error('Pago recurrente no encontrado');
 
+    // Validate account balance
+    const account = await db.accounts.get(accountId);
+    if (!account) throw new Error('Cuenta no encontrada');
+    if (account.balance < recurring.amount) {
+      throw new Error(`Saldo insuficiente. Disponible: $${account.balance.toLocaleString('es-CL')}, Monto: $${recurring.amount.toLocaleString('es-CL')}`);
+    }
+
     // Use transactionService.create() which updates account balance automatically
     await transactionService.create({
       type: 'expense',

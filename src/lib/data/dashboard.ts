@@ -85,8 +85,9 @@ export const dashboardService = {
       pendingCount: pendingRecurring.length,
     };
 
-    // adjustedExpenses: totalExpenses already includes paid service bills (via transactions) and paid recurring (via transactions)
-    // We only add pending items that don't have transactions yet
+    // adjustedExpenses: totalExpenses already includes paid service bills (via transactions),
+    // paid recurring (via transactions), and paid debt installments (via transactions).
+    // We only add pending items that don't have transactions yet.
     const adjustedExpenses = totalExpenses + pendingRecurringTotal;
     const balance = totalIncome - adjustedExpenses;
 
@@ -223,7 +224,7 @@ export const dashboardService = {
 
     // ── Debt Summary ──
     const activeDebts = debts.filter((d) => d.status === 'active');
-    const totalDebtOriginal = activeDebts.reduce((s, d) => s + d.originalAmount, 0);
+    const totalDebtOriginal = activeDebts.reduce((s, d) => s + d.totalAmount, 0);
     const totalDebtRemaining = activeDebts.reduce((s, d) => s + d.remainingAmount, 0);
     const debtSummary = {
       activeCount: activeDebts.length,

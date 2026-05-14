@@ -142,6 +142,7 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
   const [payBillDialogOpen, setPayBillDialogOpen] = useState(false)
   const [payingBillId, setPayingBillId] = useState<string | null>(null)
   const [payBillAccountId, setPayBillAccountId] = useState<string>('')
+  const [payingBillAmount, setPayingBillAmount] = useState<number>(0)
   const [payingBill, setPayingBill] = useState(false)
 
   // Accounts for pay dialog
@@ -293,20 +294,30 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
 
   // ─── Pay / Unpay Bill ───────────────────────────────────────────
 
-  const openPayBillDialog = (billId: string) => {
+  const openPayBillDialog = (billId: string, billAmount: number) => {
     setPayingBillId(billId)
+    setPayingBillAmount(billAmount)
     setPayBillAccountId(bankAccounts?.[0]?.id ?? '')
     setPayBillDialogOpen(true)
   }
 
+  // Selected account info for balance check
+  const selectedPayAccount = bankAccounts?.find((a) => a.id === payBillAccountId)
+  const hasInsufficientBalance = selectedPayAccount && selectedPayAccount.balance < payingBillAmount
+
   const handlePayBill = async () => {
     if (!payingBillId || !payBillAccountId) return
+    if (selectedPayAccount && selectedPayAccount.balance < payingBillAmount) {
+      toast.error('Saldo insuficiente en la cuenta seleccionada')
+      return
+    }
     setPayingBill(true)
     try {
       await serviceService.payBill(payingBillId, payBillAccountId)
       toast.success('Factura pagada')
       setPayBillDialogOpen(false)
       setPayingBillId(null)
+      setPayingBillAmount(0)
       refresh()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo pagar la factura.')
@@ -801,6 +812,12 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
           </DialogHeader>
 
           <div className="space-y-4 py-2">
+            {/* Monto a pagar */}
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">Monto a pagar</span>
+              <span className="font-bold text-neon-pink tabular-nums">{formatCurrency(payingBillAmount)}</span>
+            </div>
+
             <div className="grid gap-2">
               <Label>Cuenta de Pago</Label>
               <Select
@@ -824,6 +841,19 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
                 <p className="text-xs text-muted-foreground">No hay cuentas registradas. Crea una primero.</p>
               )}
             </div>
+
+            {/* Saldo insuficiente warning */}
+            {hasInsufficientBalance && (
+              <div className="flex items-center gap-2 p-3 rounded-lg border border-neon-pink/30 bg-neon-pink/10">
+                <AlertTriangle className="size-4 text-neon-pink shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-neon-pink">Saldo insuficiente</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    Disponible: {formatCurrency(selectedPayAccount?.balance ?? 0)} • Necesitas: {formatCurrency(payingBillAmount)}
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
 
           <DialogFooter>
@@ -836,8 +866,8 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
             </Button>
             <Button
               onClick={handlePayBill}
-              disabled={payingBill || !payBillAccountId}
-              className="bg-neon-green/20 border border-neon-green/50 text-neon-green hover:bg-neon-green/30"
+              disabled={payingBill || !payBillAccountId || !!hasInsufficientBalance}
+              className="bg-neon-green/20 border border-neon-green/50 text-neon-green hover:bg-neon-green/30 disabled:opacity-50"
             >
               {payingBill ? (
                 <>
@@ -918,7 +948,7 @@ function ServiceBillSummaryCard({
 
 interface BillsSubTableProps {
   accountId: string
-  onPayBill: (billId: string) => void
+  onPayBill: (billId: string, billAmount: number) => void
   onUnpayBill: (billId: string) => void
   refreshKey: number
 }
@@ -1009,7 +1039,7 @@ function BillsSubTable({ accountId, onPayBill, onUnpayBill, refreshKey }: BillsS
                   <Button
                     size="sm"
                     className="h-6 text-[10px] bg-neon-green/20 text-neon-green hover:bg-neon-green/30 border border-neon-green/30 px-2"
-                    onClick={() => onPayBill(bill.id)}
+                    onClick={() => onPayBill(bill.id, bill.amount)}
                   >
                     Pagar
                   </Button>

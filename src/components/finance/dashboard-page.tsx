@@ -390,8 +390,10 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
   }
 
   // ── Combined income/expense for stat cards ──
+  // totalExpenses already includes: paid service bills, paid recurring, and paid debt installments (via transactionService.create())
+  // We add only pending obligations that haven't been paid yet
   const totalIncomeCombined = data.totalIncome
-  const totalExpensesCombined = data.totalExpenses + data.serviceSummary.pendingAmount + data.debtPaymentsTotal + data.recurringSummary.pendingThisMonth
+  const totalExpensesCombined = data.totalExpenses + data.serviceSummary.pendingAmount + data.recurringSummary.pendingThisMonth
 
   return (
     <div className="p-4 md:p-6 space-y-5 overflow-y-auto cyber-scrollbar">
@@ -501,7 +503,7 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
               <p className="text-xl font-bold text-neon-pink tabular-nums" style={{ textShadow: '0 0 8px rgba(255,42,109,0.4)' }}>
                 {formatCurrency(totalExpensesCombined)}
               </p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Transacciones + Servicios pendientes + Deudas + Recurrentes</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Pagados + Servicios pendientes + Recurrentes pendientes</p>
             </CardContent>
             <div className="px-5 pb-2">
               <button onClick={() => onNavigate?.('transactions')} className="flex items-center gap-1 text-[10px] text-neon-pink/70 hover:text-neon-pink transition-colors">

@@ -74,6 +74,13 @@ export const serviceService = {
     const bill = await db.serviceBills.get(billId);
     if (!bill) throw new Error('Boleta no encontrada');
 
+    // Validate account balance
+    const account = await db.accounts.get(accountId);
+    if (!account) throw new Error('Cuenta no encontrada');
+    if (account.balance < bill.amount) {
+      throw new Error(`Saldo insuficiente. Disponible: $${account.balance.toLocaleString('es-CL')}, Monto: $${bill.amount.toLocaleString('es-CL')}`);
+    }
+
     const serviceAccount = await db.serviceAccounts.get(bill.serviceAccountId);
 
     // Use transactionService.create() which updates account balance automatically
