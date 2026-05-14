@@ -89,8 +89,6 @@ const serviceAccountSchema = z.object({
   provider: z.string().min(1, 'El proveedor es requerido'),
   accountNumber: z.string().optional().default(''),
   categoryId: z.string().optional().default(''),
-  amount: z.coerce.number().min(0, 'El monto debe ser mayor o igual a 0'),
-  dueDay: z.coerce.number().min(1, 'Mínimo 1').max(31, 'Máximo 31').optional().default(0),
   isActive: z.boolean().default(true),
   notes: z.string().optional().default(''),
 })
@@ -168,8 +166,6 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
       provider: '',
       accountNumber: '',
       categoryId: '',
-      amount: 0,
-      dueDay: 0,
       isActive: true,
       notes: '',
     },
@@ -177,13 +173,13 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
 
   const openCreateAccount = () => {
     setEditingAccount(null)
+    // Find the 'Servicios' category to set as default
+    const serviciosCat = expenseCategories?.find((c) => c.name === 'Servicios')
     accountForm.reset({
       name: '',
       provider: '',
       accountNumber: '',
-      categoryId: '',
-      amount: 0,
-      dueDay: 0,
+      categoryId: serviciosCat?.id ?? '',
       isActive: true,
       notes: '',
     })
@@ -197,8 +193,6 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
       provider: account.provider,
       accountNumber: account.accountNumber ?? '',
       categoryId: account.categoryId ?? '',
-      amount: account.amount,
-      dueDay: account.dueDay ?? 0,
       isActive: account.isActive,
       notes: account.notes ?? '',
     })
@@ -212,8 +206,8 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
         provider: values.provider,
         accountNumber: values.accountNumber || undefined,
         categoryId: values.categoryId || undefined,
-        amount: values.amount,
-        dueDay: values.dueDay || undefined,
+        amount: 0,
+        dueDay: undefined,
         isActive: values.isActive,
         notes: values.notes || undefined,
       }
@@ -377,19 +371,7 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
       </div>
 
       {/* ── Summary Cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Total Servicios */}
-        <Card className="border-neon-orange/20 bg-card/50 backdrop-blur-sm">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="flex items-center justify-center size-10 rounded-lg bg-neon-orange/10 border border-neon-orange/30">
-              <CircleDollarSign className="size-5 text-neon-orange" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Total Servicios</p>
-              <p className="text-lg font-bold text-neon-orange font-mono">{formatCurrency(totalServices)}</p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Pagadas */}
         <ServiceBillSummaryCard
           accounts={accounts}
@@ -431,8 +413,7 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
                 <TableRow className="border-neon-orange/10 hover:bg-transparent">
                   <TableHead className="text-neon-orange/70">Nombre</TableHead>
                   <TableHead className="text-neon-orange/70 hidden sm:table-cell">Proveedor</TableHead>
-                  <TableHead className="text-neon-orange/70 text-right">Monto</TableHead>
-                  <TableHead className="text-neon-orange/70 hidden md:table-cell">Día de Pago</TableHead>
+                  <TableHead className="text-neon-orange/70 hidden md:table-cell">N° Cuenta</TableHead>
                   <TableHead className="text-neon-orange/70 hidden lg:table-cell">Categoría</TableHead>
                   <TableHead className="text-neon-orange/70 hidden sm:table-cell">Estado</TableHead>
                   <TableHead className="text-neon-orange/70 text-right">Acciones</TableHead>
@@ -469,16 +450,9 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
                         <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">
                           {account.provider}
                         </TableCell>
-                        {/* Monto */}
-                        <TableCell className="text-right font-mono text-neon-orange">
-                          {formatCurrency(account.amount)}
-                        </TableCell>
-                        {/* Día de Pago */}
-                        <TableCell className="hidden md:table-cell">
-                          <div className="flex items-center gap-1.5">
-                            <CalendarDays className="size-3 text-muted-foreground" />
-                            <span className="text-sm">{account.dueDay ? `Día ${account.dueDay}` : '—'}</span>
-                          </div>
+                        {/* N° Cuenta */}
+                        <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                          {account.accountNumber || '—'}
                         </TableCell>
                         {/* Categoría */}
                         <TableCell className="hidden lg:table-cell">
@@ -539,7 +513,7 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
                       {/* Expanded Bills Sub-Table */}
                       {isExpanded && (
                         <TableRow key={`${account.id}-bills`} className="border-neon-orange/5">
-                          <TableCell colSpan={7} className="bg-muted/20 p-0">
+                          <TableCell colSpan={6} className="bg-muted/20 p-0">
                             <div className="p-3">
                               <div className="flex items-center justify-between mb-2">
                                 <h4 className="text-sm font-medium text-muted-foreground">Facturas</h4>
@@ -632,93 +606,48 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
               />
             </div>
 
-            {/* Category + Amount Row */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Category */}
-              <div className="grid gap-2">
-                <Label>Categoría</Label>
-                <Select
-                  value={accountForm.watch('categoryId') || '__none__'}
-                  onValueChange={(val) => {
-                    accountForm.setValue('categoryId', val === '__none__' ? '' : val)
-                  }}
-                >
-                  <SelectTrigger className="w-full border-neon-orange/20 focus:border-neon-orange/50">
-                    <SelectValue placeholder="Sin categoría" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">Sin categoría</SelectItem>
-                    {expenseCategories?.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        {cat.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {/* Amount */}
-              <div className="grid gap-2">
-                <Label htmlFor="svc-amount">Monto Mensual</Label>
-                <Input
-                  id="svc-amount"
-                  type="number"
-                  min={0}
-                  placeholder="$0"
-                  className="border-neon-orange/20 focus:border-neon-orange/50"
-                  {...accountForm.register('amount', { valueAsNumber: true })}
-                />
-                {accountForm.formState.errors.amount && (
-                  <p className="text-xs text-destructive">
-                    {accountForm.formState.errors.amount.message}
-                  </p>
-                )}
-              </div>
+            {/* Category */}
+            <div className="grid gap-2">
+              <Label>Categoría</Label>
+              <Select
+                value={accountForm.watch('categoryId') || '__none__'}
+                onValueChange={(val) => {
+                  accountForm.setValue('categoryId', val === '__none__' ? '' : val)
+                }}
+              >
+                <SelectTrigger className="w-full border-neon-orange/20 focus:border-neon-orange/50">
+                  <SelectValue placeholder="Sin categoría" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">Sin categoría</SelectItem>
+                  {expenseCategories?.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>
+                      {cat.icon} {cat.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
-            {/* Due Day + Active Row */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Due Day */}
-              <div className="grid gap-2">
-                <Label htmlFor="svc-due-day">
-                  Día de Vencimiento <span className="text-muted-foreground text-xs">(1-31)</span>
-                </Label>
-                <Input
-                  id="svc-due-day"
-                  type="number"
-                  min={1}
-                  max={31}
-                  placeholder="Ej: 10"
-                  className="border-neon-orange/20 focus:border-neon-orange/50"
-                  {...accountForm.register('dueDay', { valueAsNumber: true })}
+            {/* Active Switch */}
+            <div className="grid gap-2">
+              <Label>Estado</Label>
+              <div className="flex items-center gap-3 h-9">
+                <Switch
+                  checked={accountForm.watch('isActive')}
+                  onCheckedChange={(checked) => accountForm.setValue('isActive', checked)}
                 />
-                {accountForm.formState.errors.dueDay && (
-                  <p className="text-xs text-destructive">
-                    {accountForm.formState.errors.dueDay.message}
-                  </p>
-                )}
-              </div>
-
-              {/* Active Switch */}
-              <div className="grid gap-2">
-                <Label>Estado</Label>
-                <div className="flex items-center gap-3 h-9">
-                  <Switch
-                    checked={accountForm.watch('isActive')}
-                    onCheckedChange={(checked) => accountForm.setValue('isActive', checked)}
-                  />
-                  <span className="text-sm">
-                    {accountForm.watch('isActive') ? (
-                      <span className="text-neon-green flex items-center gap-1">
-                        <Power className="size-3" /> Activo
-                      </span>
-                    ) : (
-                      <span className="text-neon-pink flex items-center gap-1">
-                        <PowerOff className="size-3" /> Inactivo
-                      </span>
-                    )}
-                  </span>
-                </div>
+                <span className="text-sm">
+                  {accountForm.watch('isActive') ? (
+                    <span className="text-neon-green flex items-center gap-1">
+                      <Power className="size-3" /> Activo
+                    </span>
+                  ) : (
+                    <span className="text-neon-pink flex items-center gap-1">
+                      <PowerOff className="size-3" /> Inactivo
+                    </span>
+                  )}
+                </span>
               </div>
             </div>
 
