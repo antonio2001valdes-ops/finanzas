@@ -69,6 +69,7 @@ import {
 import { dashboardService, backupService, useAsyncData } from '@/lib/data'
 import { db } from '@/lib/db-client'
 import { formatCurrency, MONTHS_ES, CHART_COLORS, ACCOUNT_TYPES } from '@/lib/finance-utils'
+import { generateMonthlySummaryPDF } from '@/lib/pdf-summary'
 import { cn } from '@/lib/utils'
 import { toast } from 'sonner'
 import { useForm } from 'react-hook-form'
@@ -339,10 +340,20 @@ export function ReportsPage({ currentMonth, currentYear, onMonthChange, onNaviga
     }
   }
 
+  const [pdfLoading, setPdfLoading] = useState(false)
+
   const handleExportPDF = async () => {
-    toast.info('Exportando PDF...')
-    // Simple PDF generation using browser print
-    window.print()
+    setPdfLoading(true)
+    toast.info('Generando PDF del resumen mensual...')
+    try {
+      await generateMonthlySummaryPDF(selectedMonth, selectedYear)
+      toast.success('PDF generado exitosamente')
+    } catch (err) {
+      console.error(err)
+      toast.error('Error al generar PDF')
+    } finally {
+      setPdfLoading(false)
+    }
   }
 
   const handleBackupJSON = async () => {
@@ -657,10 +668,15 @@ export function ReportsPage({ currentMonth, currentYear, onMonthChange, onNaviga
           <Button
             variant="outline"
             onClick={handleExportPDF}
+            disabled={pdfLoading}
             className="border-[#f9f002]/30 text-[#f9f002] hover:bg-[#f9f002]/10"
           >
-            <FileText className="size-4 mr-2" />
-            Exportar PDF
+            {pdfLoading ? (
+              <Loader2 className="size-4 mr-2 animate-spin" />
+            ) : (
+              <FileText className="size-4 mr-2" />
+            )}
+            {pdfLoading ? 'Generando...' : 'Resumen Mensual PDF'}
           </Button>
         </div>
       </SectionCard>

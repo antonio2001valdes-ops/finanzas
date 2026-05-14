@@ -11,15 +11,13 @@ import {
   Receipt,
   Wallet,
   BarChart3,
-  Download,
   Upload,
   ChevronLeft,
   ChevronRight,
   Diamond,
 } from 'lucide-react'
 import { useNavigation } from '@/lib/navigation-context'
-import { generateGitHubZip, backupService } from '@/lib/data'
-import { MonthYearPicker } from './month-year-picker'
+import { backupService } from '@/lib/data'
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -53,36 +51,13 @@ const NAV_ITEMS: NavItem[] = [
 interface SidebarProps {
   collapsed: boolean
   onToggle: () => void
-  currentMonth: number
-  currentYear: number
-  onMonthYearChange: (month: number, year: number) => void
 }
 
 export function Sidebar({
   collapsed,
   onToggle,
-  currentMonth,
-  currentYear,
-  onMonthYearChange,
 }: SidebarProps) {
   const { activePage, navigateTo } = useNavigation()
-
-  const handleDownloadZip = async () => {
-    try {
-      const blob = await generateGitHubZip()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'khorven-finance-v3.2.0.zip'
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
-      toast.success('ZIP descargado exitosamente')
-    } catch {
-      toast.error('Error al descargar ZIP')
-    }
-  }
 
   const handleExport = async () => {
     try {
@@ -148,19 +123,6 @@ export function Sidebar({
         </Button>
       </div>
 
-      {/* Month/Year Picker */}
-      <div className={cn(
-        'shrink-0 border-b border-neon-blue/10',
-        !collapsed && 'py-1'
-      )}>
-        <MonthYearPicker
-          month={currentMonth}
-          year={currentYear}
-          onChange={onMonthYearChange}
-          collapsed={collapsed}
-        />
-      </div>
-
       {/* Navigation */}
       <ScrollArea className="flex-1 cyber-scrollbar">
         <nav className={cn('flex flex-col gap-0.5 p-2')}>
@@ -219,19 +181,6 @@ export function Sidebar({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="size-9 text-muted-foreground hover:text-neon-blue hover:bg-neon-blue/10"
-                  onClick={handleDownloadZip}
-                >
-                  <Download className="size-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent side="right">Descargar ZIP</TooltipContent>
-            </Tooltip>
-            <Tooltip delayDuration={0}>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="icon"
                   className="size-9 text-muted-foreground hover:text-neon-green hover:bg-neon-green/10"
                   onClick={handleExport}
                 >
@@ -245,19 +194,11 @@ export function Sidebar({
           <div className="flex flex-col gap-1">
             <Button
               variant="ghost"
-              className="justify-start gap-2 text-muted-foreground hover:text-neon-blue hover:bg-neon-blue/10 h-9"
-              onClick={handleDownloadZip}
-            >
-              <Download className="size-4" />
-              <span className="text-xs">Descargar ZIP</span>
-            </Button>
-            <Button
-              variant="ghost"
               className="justify-start gap-2 text-muted-foreground hover:text-neon-green hover:bg-neon-green/10 h-9"
               onClick={handleExport}
             >
               <Upload className="size-4" />
-              <span className="text-xs">Exportar</span>
+              <span className="text-xs">Exportar Datos</span>
             </Button>
           </div>
         )}

@@ -288,9 +288,6 @@ function AppShellInner() {
       <Sidebar
         collapsed={sidebarCollapsed}
         onToggle={toggleSidebar}
-        currentMonth={currentMonth}
-        currentYear={currentYear}
-        onMonthYearChange={handleMonthYearChange}
       />
 
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
