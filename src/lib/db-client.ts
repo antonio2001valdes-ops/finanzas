@@ -51,6 +51,7 @@ export interface Transaction {
   sourceBillId?: string;
   sourceRecurringId?: string;
   sourceDebtPaymentId?: string;
+  sourceSavingsMovementId?: string;
   date: string;
   createdAt: string;
   updatedAt: string;

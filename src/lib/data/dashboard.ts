@@ -24,7 +24,6 @@ export interface DashboardData {
   accountSummaries: { id: string; name: string; type: string; balance: number; income: number; expenses: number; icon: string; color: string }[];
   upcomingDue: { id: string; name: string; dueDate: string; amount: number; daysRemaining: number; type: 'service' | 'recurring'; icon: string; color: string }[];
   recurringSummary: { activeCount: number; totalAmount: number; paidThisMonth: number; pendingThisMonth: number; pendingCount: number };
-  debtPaymentsTotal: number;
 }
 
 export const dashboardService = {
@@ -43,19 +42,8 @@ export const dashboardService = {
     const totalIncome = incomeTransactions.reduce((sum, t) => sum + t.amount, 0);
     const totalExpenses = expenseTransactions.reduce((sum, t) => sum + t.amount, 0);
 
-    // Service bills paid this month
+    // Service bills (used for service summary and upcoming due)
     const serviceBills = await db.serviceBills.toArray();
-    const paidBillsThisMonth = serviceBills.filter(
-      (b) => b.paid && b.paidDate && b.paidDate >= startDate && b.paidDate <= endDate
-    );
-    const servicePaymentsTotal = paidBillsThisMonth.reduce((sum, b) => sum + b.amount, 0);
-
-    // Debt payments this month
-    const debtPayments = await db.debtPayments.toArray();
-    const debtPaymentsThisMonth = debtPayments.filter(
-      (p) => p.createdAt >= startDate && p.createdAt <= endDate
-    );
-    const debtPaymentsTotal = debtPaymentsThisMonth.reduce((sum, p) => sum + p.amount, 0);
 
     // ── Recurring payments for this month ──
     const recurringPayments = await db.recurringPayments.toArray();
@@ -347,7 +335,6 @@ export const dashboardService = {
       accountSummaries,
       upcomingDue,
       recurringSummary,
-      debtPaymentsTotal,
     };
   },
 };

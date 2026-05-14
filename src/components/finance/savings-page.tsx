@@ -21,9 +21,9 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { savingsService, useAsyncData } from '@/lib/data'
+import { savingsService, accountService, useAsyncData } from '@/lib/data'
 import { formatCurrency, formatDate } from '@/lib/finance-utils'
-import type { SavingsGoal, SavingsMovement } from '@/lib/db-client'
+import type { SavingsGoal, SavingsMovement, Account } from '@/lib/db-client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -63,6 +63,13 @@ import {
   FormControl,
   FormMessage,
 } from '@/components/ui/form'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 // ─── CategoryBadge ─────────────────────────────────────────────────
 
@@ -126,6 +133,10 @@ export function SavingsPage({ currentMonth, currentYear }: { currentMonth?: numb
   const [submittingGoal, setSubmittingGoal] = useState(false)
   const [submittingMovement, setSubmittingMovement] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  // Account selection for deposit/withdraw
+  const [movementAccountId, setMovementAccountId] = useState<string>('')
+  const { data: accounts } = useAsyncData<Account[]>(() => accountService.getAll(), [])
 
   // ─── Goal Form ───────────────────────────────────────────────────
 
@@ -213,50 +224,53 @@ export function SavingsPage({ currentMonth, currentYear }: { currentMonth?: numb
   const openDepositDialog = (goal: SavingsGoal) => {
     setSelectedGoal(goal)
     movementForm.reset({ amount: 0, description: '' })
+    setMovementAccountId(accounts?.[0]?.id ?? '')
     setDepositDialogOpen(true)
   }
 
   const openWithdrawDialog = (goal: SavingsGoal) => {
     setSelectedGoal(goal)
     movementForm.reset({ amount: 0, description: '' })
+    setMovementAccountId(accounts?.[0]?.id ?? '')
     setWithdrawDialogOpen(true)
   }
 
   const onSubmitDeposit = async (data: MovementForm) => {
-    if (!selectedGoal) return
+    if (!selectedGoal || !movementAccountId) return
+    const selectedAcct = accounts?.find((a) => a.id === movementAccountId)
+    if (selectedAcct && selectedAcct.balance < data.amount) {
+      toast.error('Saldo insuficiente en la cuenta seleccionada')
+      return
+    }
     setSubmittingMovement(true)
     try {
-      await savingsService.addMovement(selectedGoal.id, data.amount, 'deposit', data.description)
+      await savingsService.addMovement(selectedGoal.id, data.amount, 'deposit', movementAccountId, data.description)
       toast.success(`Depósito de ${formatCurrency(data.amount)} realizado`)
       setDepositDialogOpen(false)
       refetch()
       if (expandedGoalId === selectedGoal.id) {
         loadMovements(selectedGoal.id)
       }
-    } catch {
-      toast.error('Error al realizar el depósito')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al realizar el depósito')
     } finally {
       setSubmittingMovement(false)
     }
   }
 
   const onSubmitWithdraw = async (data: MovementForm) => {
-    if (!selectedGoal) return
-    if (data.amount > selectedGoal.currentAmount) {
-      toast.error('No puedes retirar más de lo disponible')
-      return
-    }
+    if (!selectedGoal || !movementAccountId) return
     setSubmittingMovement(true)
     try {
-      await savingsService.addMovement(selectedGoal.id, data.amount, 'withdraw', data.description)
+      await savingsService.addMovement(selectedGoal.id, data.amount, 'withdraw', movementAccountId, data.description)
       toast.success(`Retiro de ${formatCurrency(data.amount)} realizado`)
       setWithdrawDialogOpen(false)
       refetch()
       if (expandedGoalId === selectedGoal.id) {
         loadMovements(selectedGoal.id)
       }
-    } catch {
-      toast.error('Error al realizar el retiro')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Error al realizar el retiro')
     } finally {
       setSubmittingMovement(false)
     }
@@ -808,6 +822,47 @@ export function SavingsPage({ currentMonth, currentYear }: { currentMonth?: numb
                 )}
               />
 
+              {/* Account selection */}
+              <div className="space-y-2">
+                <Label>Cuenta de Origen</Label>
+                <Select
+                  value={movementAccountId}
+                  onValueChange={setMovementAccountId}
+                >
+                  <SelectTrigger className="border-neon-cyan/20 focus:border-neon-cyan/50 w-full">
+                    <SelectValue placeholder="Seleccionar cuenta" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts?.map((acct) => (
+                      <SelectItem key={acct.id} value={acct.id}>
+                        {acct.icon} {acct.name} ({formatCurrency(acct.balance)})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {(!accounts || accounts.length === 0) && (
+                  <p className="text-xs text-muted-foreground">No hay cuentas registradas.</p>
+                )}
+              </div>
+
+              {/* Saldo insuficiente warning */}
+              {(() => {
+                const selectedAcct = accounts?.find((a) => a.id === movementAccountId)
+                const depAmount = movementForm.watch('amount') || 0
+                const insufficient = selectedAcct && selectedAcct.balance < depAmount
+                return insufficient ? (
+                  <div className="flex items-center gap-2 p-3 rounded-lg border border-neon-pink/30 bg-neon-pink/10">
+                    <AlertTriangle className="size-4 text-neon-pink shrink-0" />
+                    <div>
+                      <p className="text-xs font-semibold text-neon-pink">Saldo insuficiente</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        Disponible: {formatCurrency(selectedAcct?.balance ?? 0)} • Necesitas: {formatCurrency(depAmount)}
+                      </p>
+                    </div>
+                  </div>
+                ) : null
+              })()}
+
               <DialogFooter>
                 <Button
                   type="button"
@@ -818,8 +873,8 @@ export function SavingsPage({ currentMonth, currentYear }: { currentMonth?: numb
                 </Button>
                 <Button
                   type="submit"
-                  disabled={submittingMovement}
-                  className="bg-neon-cyan/20 border border-neon-cyan/50 text-neon-cyan hover:bg-neon-cyan/30"
+                  disabled={submittingMovement || !movementAccountId}
+                  className="bg-neon-cyan/20 border border-neon-cyan/50 text-neon-cyan hover:bg-neon-cyan/30 disabled:opacity-50"
                 >
                   <ArrowDownToLine className="size-4 mr-2" />
                   {submittingMovement ? 'Depositando...' : 'Depositar'}
@@ -881,6 +936,29 @@ export function SavingsPage({ currentMonth, currentYear }: { currentMonth?: numb
                 )}
               />
 
+              {/* Account selection */}
+              <div className="space-y-2">
+                <Label>Cuenta de Destino</Label>
+                <Select
+                  value={movementAccountId}
+                  onValueChange={setMovementAccountId}
+                >
+                  <SelectTrigger className="border-neon-yellow/20 focus:border-neon-yellow/50 w-full">
+                    <SelectValue placeholder="Seleccionar cuenta" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts?.map((acct) => (
+                      <SelectItem key={acct.id} value={acct.id}>
+                        {acct.icon} {acct.name} ({formatCurrency(acct.balance)})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {(!accounts || accounts.length === 0) && (
+                  <p className="text-xs text-muted-foreground">No hay cuentas registradas.</p>
+                )}
+              </div>
+
               <DialogFooter>
                 <Button
                   type="button"
@@ -891,8 +969,8 @@ export function SavingsPage({ currentMonth, currentYear }: { currentMonth?: numb
                 </Button>
                 <Button
                   type="submit"
-                  disabled={submittingMovement}
-                  className="bg-neon-yellow/20 border border-neon-yellow/50 text-neon-yellow hover:bg-neon-yellow/30"
+                  disabled={submittingMovement || !movementAccountId}
+                  className="bg-neon-yellow/20 border border-neon-yellow/50 text-neon-yellow hover:bg-neon-yellow/30 disabled:opacity-50"
                 >
                   <ArrowUpFromLine className="size-4 mr-2" />
                   {submittingMovement ? 'Retirando...' : 'Retirar'}
