@@ -292,10 +292,18 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
         style={{ boxShadow: '0 0 10px #05d9e820' }}
       >
         <CardContent className="p-4">
-          <p className="text-xs text-muted-foreground">Total Neto</p>
-          <p className="text-2xl font-bold" style={{ color: '#05d9e8' }}>
-            {formatCurrency(totalBalance)}
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-muted-foreground">Total Neto</p>
+              <p className="text-2xl font-bold" style={{ color: '#05d9e8', textShadow: '0 0 8px rgba(5,217,232,0.4)' }}>
+                {formatCurrency(totalBalance)}
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground">Cuentas</p>
+              <p className="text-2xl font-bold text-foreground">{accountList.length}</p>
+            </div>
+          </div>
         </CardContent>
       </Card>
 
