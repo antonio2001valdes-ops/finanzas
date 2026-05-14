@@ -70,6 +70,23 @@ export const serviceService = {
     return bill;
   },
 
+  async updateBill(id: string, data: Partial<ServiceBill>): Promise<void> {
+    await db.serviceBills.update(id, data);
+  },
+
+  async deleteBill(id: string): Promise<void> {
+    // If bill was paid, reverse the linked transaction
+    const bill = await db.serviceBills.get(id);
+    if (bill?.paid) {
+      const allTransactions = await db.transactions.toArray();
+      const linkedTx = allTransactions.find((t) => t.sourceBillId === id);
+      if (linkedTx) {
+        await transactionService.delete(linkedTx.id);
+      }
+    }
+    await db.serviceBills.delete(id);
+  },
+
   async payBill(billId: string, accountId: string): Promise<void> {
     const bill = await db.serviceBills.get(billId);
     if (!bill) throw new Error('Boleta no encontrada');

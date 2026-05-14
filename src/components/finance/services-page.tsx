@@ -137,6 +137,12 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
   // Bill dialog state
   const [billDialogOpen, setBillDialogOpen] = useState(false)
   const [billAccountId, setBillAccountId] = useState<string | null>(null)
+  const [editingBill, setEditingBill] = useState<ServiceBill | null>(null)
+
+  // Delete bill dialog state
+  const [deleteBillDialogOpen, setDeleteBillDialogOpen] = useState(false)
+  const [deletingBillId, setDeletingBillId] = useState<string | null>(null)
+  const [deletingBill, setDeletingBill] = useState(false)
 
   // Pay bill dialog state
   const [payBillDialogOpen, setPayBillDialogOpen] = useState(false)
@@ -263,6 +269,7 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
   })
 
   const openCreateBill = (accountId: string) => {
+    setEditingBill(null)
     setBillAccountId(accountId)
     const now = new Date()
     const yearStr = currentYear ?? now.getFullYear()
@@ -274,21 +281,57 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
     setBillDialogOpen(true)
   }
 
+  const openEditBill = (bill: ServiceBill) => {
+    setEditingBill(bill)
+    setBillAccountId(bill.serviceAccountId)
+    const dateStr = bill.dueDate.split('T')[0]
+    billForm.reset({
+      amount: bill.amount,
+      dueDate: dateStr,
+    })
+    setBillDialogOpen(true)
+  }
+
   const onSubmitBill = async (values: BillForm) => {
-    if (!billAccountId) return
     try {
-      await serviceService.createBill({
-        serviceAccountId: billAccountId,
-        amount: values.amount,
-        dueDate: new Date(values.dueDate + 'T12:00:00').toISOString(),
-        paid: false,
-      })
-      toast.success('Factura creada')
+      if (editingBill) {
+        await serviceService.updateBill(editingBill.id, {
+          amount: values.amount,
+          dueDate: new Date(values.dueDate + 'T12:00:00').toISOString(),
+        })
+        toast.success('Factura actualizada')
+      } else {
+        if (!billAccountId) return
+        await serviceService.createBill({
+          serviceAccountId: billAccountId,
+          amount: values.amount,
+          dueDate: new Date(values.dueDate + 'T12:00:00').toISOString(),
+          paid: false,
+        })
+        toast.success('Factura creada')
+      }
       setBillDialogOpen(false)
+      setEditingBill(null)
       setBillAccountId(null)
       refresh()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'No se pudo crear la factura.')
+      toast.error(err instanceof Error ? err.message : 'No se pudo guardar la factura.')
+    }
+  }
+
+  const confirmDeleteBill = async () => {
+    if (!deletingBillId) return
+    setDeletingBill(true)
+    try {
+      await serviceService.deleteBill(deletingBillId)
+      toast.success('Factura eliminada')
+      setDeleteBillDialogOpen(false)
+      setDeletingBillId(null)
+      refresh()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'No se pudo eliminar la factura.')
+    } finally {
+      setDeletingBill(false)
     }
   }
 
@@ -563,6 +606,11 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
                                 accountId={account.id}
                                 onPayBill={openPayBillDialog}
                                 onUnpayBill={handleUnpayBill}
+                                onEditBill={openEditBill}
+                                onDeleteBill={(billId) => {
+                                  setDeletingBillId(billId)
+                                  setDeleteBillDialogOpen(true)
+                                }}
                                 refreshKey={refreshKey}
                               />
                             </div>
@@ -716,13 +764,17 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
         </DialogContent>
       </Dialog>
 
-      {/* ── Create Bill Dialog ─────────────────────────────────────── */}
+      {/* ── Create/Edit Bill Dialog ─────────────────────────────────────── */}
       <Dialog open={billDialogOpen} onOpenChange={setBillDialogOpen}>
         <DialogContent className="border-neon-orange/20 sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-neon-orange">Nueva Factura</DialogTitle>
+            <DialogTitle className="text-neon-orange">
+              {editingBill ? 'Editar Factura' : 'Nueva Factura'}
+            </DialogTitle>
             <DialogDescription>
-              Ingresa los datos de la factura para este servicio.
+              {editingBill
+                ? 'Modifica los datos de la factura.'
+                : 'Ingresa los datos de la factura para este servicio.'}
             </DialogDescription>
           </DialogHeader>
 
@@ -773,12 +825,34 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
                 type="submit"
                 className="bg-neon-orange/20 border border-neon-orange/50 text-neon-orange hover:bg-neon-orange/30"
               >
-                Crear Factura
+                {editingBill ? 'Guardar Cambios' : 'Crear Factura'}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* ── Delete Bill Confirmation Dialog ─────────────────────────────── */}
+      <AlertDialog open={deleteBillDialogOpen} onOpenChange={setDeleteBillDialogOpen}>
+        <AlertDialogContent className="border-neon-pink/20">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-neon-pink">Eliminar Factura</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro de eliminar esta factura? Si la factura ya fue pagada, se revertirá la transacción asociada. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingBill}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteBill}
+              disabled={deletingBill}
+              className="bg-neon-pink/20 border border-neon-pink/50 text-neon-pink hover:bg-neon-pink/30"
+            >
+              {deletingBill ? 'Eliminando...' : 'Eliminar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* ── Delete Confirmation Dialog ─────────────────────────────── */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
@@ -950,10 +1024,12 @@ interface BillsSubTableProps {
   accountId: string
   onPayBill: (billId: string, billAmount: number) => void
   onUnpayBill: (billId: string) => void
+  onEditBill: (bill: ServiceBill) => void
+  onDeleteBill: (billId: string) => void
   refreshKey: number
 }
 
-function BillsSubTable({ accountId, onPayBill, onUnpayBill, refreshKey }: BillsSubTableProps) {
+function BillsSubTable({ accountId, onPayBill, onUnpayBill, onEditBill, onDeleteBill, refreshKey }: BillsSubTableProps) {
   const { data: bills, loading: billsLoading } = useAsyncData(
     () => serviceService.getBills(accountId),
     [accountId, refreshKey]
@@ -1026,24 +1102,47 @@ function BillsSubTable({ accountId, onPayBill, onUnpayBill, refreshKey }: BillsS
               </TableCell>
               {/* Acción */}
               <TableCell className="text-xs py-1.5 text-right">
-                {bill.paid ? (
+                <div className="flex items-center justify-end gap-0.5">
+                  {bill.paid ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-6 p-0 text-muted-foreground hover:text-neon-orange hover:bg-neon-orange/10"
+                      onClick={() => onUnpayBill(bill.id)}
+                      title="Anular pago"
+                    >
+                      <XCircle className="size-3" />
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-6 p-0 text-muted-foreground hover:text-neon-green hover:bg-neon-green/10"
+                      onClick={() => onPayBill(bill.id, bill.amount)}
+                      title="Pagar"
+                    >
+                      <Banknote className="size-3" />
+                    </Button>
+                  )}
                   <Button
                     variant="ghost"
-                    size="sm"
-                    className="h-6 text-[10px] text-neon-pink hover:text-neon-pink hover:bg-neon-pink/10 px-2"
-                    onClick={() => onUnpayBill(bill.id)}
+                    size="icon"
+                    className="size-6 p-0 text-muted-foreground hover:text-neon-blue hover:bg-neon-blue/10"
+                    onClick={() => onEditBill(bill)}
+                    title="Editar"
                   >
-                    Anular
+                    <Pencil className="size-3" />
                   </Button>
-                ) : (
                   <Button
-                    size="sm"
-                    className="h-6 text-[10px] bg-neon-green/20 text-neon-green hover:bg-neon-green/30 border border-neon-green/30 px-2"
-                    onClick={() => onPayBill(bill.id, bill.amount)}
+                    variant="ghost"
+                    size="icon"
+                    className="size-6 p-0 text-muted-foreground hover:text-neon-pink hover:bg-neon-pink/10"
+                    onClick={() => onDeleteBill(bill.id)}
+                    title="Eliminar"
                   >
-                    Pagar
+                    <Trash2 className="size-3" />
                   </Button>
-                )}
+                </div>
               </TableCell>
             </TableRow>
           ))}
