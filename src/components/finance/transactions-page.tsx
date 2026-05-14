@@ -20,6 +20,7 @@ import { toast } from 'sonner'
 
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DatePickerField } from '@/components/ui/date-picker-field'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
@@ -813,10 +814,9 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
             {/* Date */}
             <div className="space-y-2">
               <Label>Fecha</Label>
-              <Input
-                type="date"
+              <DatePickerField
                 {...txForm.register('date')}
-                className="border-neon-cyan/20 focus-visible:border-neon-cyan/50"
+                accentColor="#05d9e8"
               />
               {txForm.formState.errors.date && (
                 <p className="text-xs text-destructive">

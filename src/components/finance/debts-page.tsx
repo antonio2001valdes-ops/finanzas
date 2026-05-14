@@ -20,6 +20,7 @@ import type { Debt, DebtPayment, Account } from '@/lib/db-client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DatePickerField } from '@/components/ui/date-picker-field'
 import { Label } from '@/components/ui/label'
 import {
   Select,
@@ -651,10 +652,9 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
                   <FormItem>
                     <FormLabel>Fecha de Término (opcional)</FormLabel>
                     <FormControl>
-                      <Input
-                        type="date"
+                      <DatePickerField
                         {...field}
-                        className="border-[#ff6b35]/20 focus:border-[#ff6b35]/50"
+                        accentColor="#ff6b35"
                       />
                     </FormControl>
                     <FormMessage />

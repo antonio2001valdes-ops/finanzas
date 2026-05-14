@@ -29,6 +29,7 @@ import type { RecurringPayment, ExpenseCategory, ServiceAccount, Account, Transa
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DatePickerField } from '@/components/ui/date-picker-field'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
@@ -884,10 +885,9 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
             {/* Fecha de vencimiento */}
             <div className="space-y-2">
               <Label>Fecha de vencimiento</Label>
-              <Input
-                type="date"
+              <DatePickerField
                 {...billForm.register('dueDate')}
-                className="border-neon-yellow/20 focus-visible:border-neon-yellow/50"
+                accentColor="#f9f002"
               />
               {billForm.formState.errors.dueDate && (
                 <p className="text-xs text-destructive">{billForm.formState.errors.dueDate.message}</p>

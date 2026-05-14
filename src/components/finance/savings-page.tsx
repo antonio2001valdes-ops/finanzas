@@ -27,6 +27,7 @@ import type { SavingsGoal, SavingsMovement, Account } from '@/lib/db-client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { DatePickerField } from '@/components/ui/date-picker-field'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -703,10 +704,9 @@ export function SavingsPage({ currentMonth, currentYear }: { currentMonth?: numb
                   <FormItem>
                     <FormLabel>Fecha Límite (opcional)</FormLabel>
                     <FormControl>
-                      <Input
-                        type="date"
+                      <DatePickerField
                         {...field}
-                        className="border-neon-cyan/20 focus:border-neon-cyan/50"
+                        accentColor="#05d9e8"
                       />
                     </FormControl>
                     <FormMessage />

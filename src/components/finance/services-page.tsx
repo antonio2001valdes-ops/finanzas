@@ -31,6 +31,7 @@ import type { ServiceAccount, ServiceBill, ExpenseCategory, Account } from '@/li
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { DatePickerField } from '@/components/ui/date-picker-field'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
@@ -800,10 +801,9 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
             {/* Due Date */}
             <div className="grid gap-2">
               <Label htmlFor="bill-due-date">Fecha de Vencimiento</Label>
-              <Input
+              <DatePickerField
                 id="bill-due-date"
-                type="date"
-                className="border-neon-orange/20 focus:border-neon-orange/50"
+                accentColor="#ff6b35"
                 {...billForm.register('dueDate')}
               />
               {billForm.formState.errors.dueDate && (
