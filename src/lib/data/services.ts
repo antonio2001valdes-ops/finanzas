@@ -48,7 +48,7 @@ export const serviceService = {
   },
 
   async payBill(billId: string): Promise<void> {
-    await db.transaction('rw', [db.serviceBills, db.transactions, db.accounts], async () => {
+    await db.transaction('rw', [db.serviceBills, db.transactions, db.accounts, db.serviceAccounts], async () => {
       const bill = await db.serviceBills.get(billId);
       if (!bill) throw new Error('Boleta no encontrada');
 
@@ -78,7 +78,7 @@ export const serviceService = {
   },
 
   async unpayBill(billId: string): Promise<void> {
-    await db.transaction('rw', [db.serviceBills, db.transactions], async () => {
+    await db.transaction('rw', [db.serviceBills, db.transactions, db.serviceAccounts], async () => {
       const bill = await db.serviceBills.get(billId);
       if (!bill) throw new Error('Boleta no encontrada');
 
