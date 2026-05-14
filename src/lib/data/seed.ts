@@ -23,9 +23,9 @@ const DEFAULT_EXPENSE_CATEGORIES = [
 ];
 
 const DEFAULT_ACCOUNTS = [
-  { name: 'Corriente', type: 'checking', balance: 0, currency: 'USD', icon: '🏦', color: '#05d9e8' },
-  { name: 'Ahorro', type: 'savings', balance: 0, currency: 'USD', icon: '🐷', color: '#01ff89' },
-  { name: 'Efectivo', type: 'cash', balance: 0, currency: 'USD', icon: '💵', color: '#f9f002' },
+  { name: 'Corriente', type: 'checking', balance: 0, currency: 'CLP', icon: '🏦', color: '#05d9e8' },
+  { name: 'Ahorro', type: 'savings', balance: 0, currency: 'CLP', icon: '🐷', color: '#01ff89' },
+  { name: 'Efectivo', type: 'cash', balance: 0, currency: 'CLP', icon: '💵', color: '#f9f002' },
 ];
 
 export const seedService = {

@@ -58,6 +58,36 @@ import { accountService, transferService, useAsyncData } from '@/lib/data'
 import { formatCurrency, ACCOUNT_TYPES } from '@/lib/finance-utils'
 import type { Account } from '@/lib/db-client'
 
+// ─── Constants ──────────────────────────────────────────────────
+
+const CURRENCIES = [
+  { value: 'CLP', label: 'CLP - Peso Chileno', symbol: '$' },
+  { value: 'USD', label: 'USD - Dólar Estadounidense', symbol: 'US$' },
+  { value: 'EUR', label: 'EUR - Euro', symbol: '€' },
+  { value: 'ARS', label: 'ARS - Peso Argentino', symbol: 'AR$' },
+  { value: 'PEN', label: 'PEN - Sol Peruano', symbol: 'S/.' },
+  { value: 'COP', label: 'COP - Peso Colombiano', symbol: 'CO$' },
+  { value: 'MXN', label: 'MXN - Peso Mexicano', symbol: 'MX$' },
+  { value: 'BRL', label: 'BRL - Real Brasileño', symbol: 'R$' },
+  { value: 'GBP', label: 'GBP - Libra Esterlina', symbol: '£' },
+  { value: 'JPY', label: 'JPY - Yen Japonés', symbol: '¥' },
+] as const
+
+const ACCOUNT_COLORS = [
+  { value: '#05d9e8', label: 'Cyan Neón' },
+  { value: '#ff2a6d', label: 'Rosa Neón' },
+  { value: '#01ff89', label: 'Verde Neón' },
+  { value: '#d300c5', label: 'Magenta' },
+  { value: '#f9f002', label: 'Amarillo Neón' },
+  { value: '#ff6b35', label: 'Naranja' },
+  { value: '#8b5cf6', label: 'Violeta' },
+  { value: '#06b6d4', label: 'Cyan Claro' },
+  { value: '#ef4444', label: 'Rojo' },
+  { value: '#22c55e', label: 'Verde' },
+  { value: '#3b82f6', label: 'Azul' },
+  { value: '#f59e0b', label: 'Ámbar' },
+] as const
+
 // ─── Zod Schemas ──────────────────────────────────────────────────
 
 const accountSchema = z.object({
@@ -126,7 +156,7 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
       name: '',
       type: 'checking',
       balance: 0,
-      currency: 'USD',
+      currency: 'CLP',
       icon: '💰',
       color: '#05d9e8',
       notes: '',
@@ -151,7 +181,7 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
       name: '',
       type: 'checking',
       balance: 0,
-      currency: 'USD',
+      currency: 'CLP',
       icon: '💰',
       color: '#05d9e8',
       notes: '',
@@ -477,11 +507,21 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
               {/* Currency */}
               <div className="space-y-2">
                 <Label>Moneda</Label>
-                <Input
-                  placeholder="USD"
-                  {...form.register('currency')}
-                  className="border-[#05d9e8]/20 focus-visible:border-[#05d9e8]/50"
-                />
+                <Select
+                  value={form.watch('currency')}
+                  onValueChange={(val) => form.setValue('currency', val)}
+                >
+                  <SelectTrigger className="border-[#05d9e8]/20">
+                    <SelectValue placeholder="Seleccionar moneda" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CURRENCIES.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 {form.formState.errors.currency && (
                   <p className="text-xs text-destructive">{form.formState.errors.currency.message}</p>
                 )}
@@ -502,38 +542,33 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
               {/* Color */}
               <div className="space-y-2">
                 <Label>Color</Label>
-                <div className="flex gap-2">
-                  <Input
-                    placeholder="#05d9e8"
-                    {...form.register('color')}
-                    className="border-[#05d9e8]/20 focus-visible:border-[#05d9e8]/50 flex-1"
-                  />
-                  <div
-                    className="w-9 h-9 rounded-md border border-white/10 shrink-0"
-                    style={{ backgroundColor: form.watch('color') || '#05d9e8' }}
-                  />
-                </div>
-              </div>
-            </div>
-
-            {/* Predefined Colors */}
-            <div className="space-y-2">
-              <Label className="text-xs text-muted-foreground">Colores predefinidos</Label>
-              <div className="flex gap-2 flex-wrap">
-                {['#05d9e8', '#ff2a6d', '#01ff89', '#d300c5', '#f9f002', '#ff6b35', '#8b5cf6', '#06b6d4'].map(
-                  (color) => (
-                    <button
-                      key={color}
-                      type="button"
-                      className="w-7 h-7 rounded-full border-2 transition-transform hover:scale-110"
-                      style={{
-                        backgroundColor: color,
-                        borderColor: form.watch('color') === color ? 'white' : 'transparent',
-                      }}
-                      onClick={() => form.setValue('color', color)}
-                    />
-                  )
-                )}
+                <Select
+                  value={form.watch('color') || '#05d9e8'}
+                  onValueChange={(val) => form.setValue('color', val)}
+                >
+                  <SelectTrigger className="border-[#05d9e8]/20">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-full shrink-0"
+                        style={{ backgroundColor: form.watch('color') || '#05d9e8' }}
+                      />
+                      <SelectValue placeholder="Seleccionar color" />
+                    </div>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {ACCOUNT_COLORS.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        <div className="flex items-center gap-2">
+                          <div
+                            className="w-3 h-3 rounded-full shrink-0"
+                            style={{ backgroundColor: c.value }}
+                          />
+                          {c.label}
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             </div>
 
