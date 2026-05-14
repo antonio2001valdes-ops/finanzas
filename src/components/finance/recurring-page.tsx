@@ -19,11 +19,12 @@ import {
   Clock,
   Loader2,
   AlertTriangle,
+  FileText,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { recurringService, categoryService, useAsyncData } from '@/lib/data'
+import { recurringService, categoryService, serviceService, useAsyncData } from '@/lib/data'
 import { formatCurrency, formatDate, RECURRING_INTERVALS } from '@/lib/finance-utils'
-import type { RecurringPayment, ExpenseCategory } from '@/lib/db-client'
+import type { RecurringPayment, ExpenseCategory, ServiceAccount } from '@/lib/db-client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -91,7 +92,6 @@ function CategoryBadge({ name, color }: { name: string; color?: string }) {
 
 const recurringSchema = z.object({
   name: z.string().min(1, 'Nombre es requerido'),
-  amount: z.number().min(1, 'El monto debe ser mayor a 0'),
   interval: z.enum(['monthly', 'weekly', 'yearly']),
   dueDay: z.number().min(1, 'Día mínimo es 1').max(31, 'Día máximo es 31'),
   categoryId: z.string().optional(),
@@ -100,6 +100,14 @@ const recurringSchema = z.object({
 })
 
 type RecurringForm = z.infer<typeof recurringSchema>
+
+const billSchema = z.object({
+  serviceAccountId: z.string().min(1, 'Selecciona un servicio'),
+  amount: z.coerce.number().min(1, 'El monto debe ser mayor a 0'),
+  dueDate: z.string().min(1, 'La fecha es requerida'),
+})
+
+type BillForm = z.infer<typeof billSchema>
 
 // ─── Theme Colors ────────────────────────────────────────────────────
 
@@ -111,6 +119,12 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
   // Data
   const { data: recurringPayments, loading, refetch } = useAsyncData<RecurringPayment[]>(
     () => recurringService.getAll(),
+    []
+  )
+
+  // Service accounts for bill creation
+  const { data: serviceAccounts } = useAsyncData<ServiceAccount[]>(
+    () => serviceService.getAllAccounts(),
     []
   )
 
@@ -128,14 +142,19 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
   const [recurringDialogOpen, setRecurringDialogOpen] = useState(false)
   const [editingRecurring, setEditingRecurring] = useState<RecurringPayment | null>(null)
   const [payDialogOpen, setPayDialogOpen] = useState(false)
-  const [selectedRecurring, setSelectedRecurring] = useState<RecurringPayment | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [recurringToDelete, setRecurringToDelete] = useState<RecurringPayment | null>(null)
+  const [selectedRecurring, setSelectedRecurring] = useState<RecurringPayment | null>(null)
+
+  // Bill dialog state
+  const [billDialogOpen, setBillDialogOpen] = useState(false)
+  const [selectedRecurringForBill, setSelectedRecurringForBill] = useState<RecurringPayment | null>(null)
 
   // Submitting states
   const [submittingRecurring, setSubmittingRecurring] = useState(false)
   const [paying, setPaying] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [submittingBill, setSubmittingBill] = useState(false)
 
   // ─── Recurring Form ─────────────────────────────────────────────
 
@@ -143,7 +162,6 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
     resolver: zodResolver(recurringSchema),
     defaultValues: {
       name: '',
-      amount: 0,
       interval: 'monthly',
       dueDay: 1,
       categoryId: '',
@@ -156,7 +174,6 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
     setEditingRecurring(null)
     recurringForm.reset({
       name: '',
-      amount: 0,
       interval: 'monthly',
       dueDay: 1,
       categoryId: '',
@@ -170,7 +187,6 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
     setEditingRecurring(payment)
     recurringForm.reset({
       name: payment.name,
-      amount: payment.amount,
       interval: payment.interval as 'monthly' | 'weekly' | 'yearly',
       dueDay: payment.dueDay,
       categoryId: payment.categoryId || '',
@@ -186,7 +202,6 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
       if (editingRecurring) {
         await recurringService.update(editingRecurring.id, {
           name: data.name,
-          amount: data.amount,
           interval: data.interval,
           dueDay: data.dueDay,
           categoryId: data.categoryId || undefined,
@@ -197,7 +212,7 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
       } else {
         await recurringService.create({
           name: data.name,
-          amount: data.amount,
+          amount: 0,
           interval: data.interval,
           dueDay: data.dueDay,
           categoryId: data.categoryId || undefined,
@@ -215,6 +230,46 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
     }
   }
 
+  // ─── Bill Form ───────────────────────────────────────────────────
+
+  const billForm = useForm<BillForm>({
+    resolver: zodResolver(billSchema),
+    defaultValues: {
+      serviceAccountId: '',
+      amount: 0,
+      dueDate: '',
+    },
+  })
+
+  const openBillDialog = (payment: RecurringPayment) => {
+    setSelectedRecurringForBill(payment)
+    billForm.reset({
+      serviceAccountId: '',
+      amount: 0,
+      dueDate: '',
+    })
+    setBillDialogOpen(true)
+  }
+
+  const onSubmitBill = async (data: BillForm) => {
+    setSubmittingBill(true)
+    try {
+      await serviceService.createBill({
+        serviceAccountId: data.serviceAccountId,
+        amount: data.amount,
+        dueDate: data.dueDate,
+        paid: false,
+      })
+      toast.success('Factura creada')
+      setBillDialogOpen(false)
+      refetch()
+    } catch {
+      toast.error('Error al crear la factura')
+    } finally {
+      setSubmittingBill(false)
+    }
+  }
+
   // ─── Pay ────────────────────────────────────────────────────────
 
   const openPayDialog = (payment: RecurringPayment) => {
@@ -227,7 +282,7 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
     setPaying(true)
     try {
       await recurringService.pay(selectedRecurring.id)
-      toast.success(`Pago de ${formatCurrency(selectedRecurring.amount)} registrado como gasto`)
+      toast.success(`Pago registrado como gasto`)
       setPayDialogOpen(false)
       refetch()
     } catch {
@@ -288,7 +343,6 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
   // ─── Computed summary ────────────────────────────────────────────
 
   const activeRecurring = recurringPayments?.filter((r) => r.isActive) ?? []
-  const totalRecurring = activeRecurring.reduce((sum, r) => sum + r.amount, 0)
   const activeCount = activeRecurring.length
 
   // Next due date (earliest among active)
@@ -352,19 +406,7 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
       </div>
 
       {/* ── Summary Cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {/* Total Recurrentes */}
-        <Card className="border-neon-cyan/20 bg-card/50 backdrop-blur-sm">
-          <CardContent className="p-4 flex items-center gap-3">
-            <div className="flex items-center justify-center size-10 rounded-lg bg-neon-cyan/10 border border-neon-cyan/30">
-              <Banknote className="size-5 text-neon-cyan" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground">Total Recurrentes</p>
-              <p className="text-lg font-bold text-neon-cyan font-mono">{formatCurrency(totalRecurring)}</p>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Activos */}
         <Card className="border-neon-green/20 bg-card/50 backdrop-blur-sm">
           <CardContent className="p-4 flex items-center gap-3">
@@ -417,7 +459,6 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
               <TableHeader>
                 <TableRow className="border-neon-cyan/10 hover:bg-transparent">
                   <TableHead className="text-neon-cyan/70">Nombre</TableHead>
-                  <TableHead className="text-neon-cyan/70 text-right">Monto</TableHead>
                   <TableHead className="text-neon-cyan/70 hidden sm:table-cell">Intervalo</TableHead>
                   <TableHead className="text-neon-cyan/70 hidden md:table-cell">Día de Pago</TableHead>
                   <TableHead className="text-neon-cyan/70 hidden lg:table-cell">Próximo Vencimiento</TableHead>
@@ -442,10 +483,6 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
                           <Repeat className={`size-4 shrink-0 ${isActive ? 'text-neon-cyan' : 'text-muted-foreground'}`} />
                           <span className="font-medium truncate max-w-[140px]">{payment.name}</span>
                         </div>
-                      </TableCell>
-                      {/* Monto */}
-                      <TableCell className="text-right font-mono text-neon-cyan">
-                        {formatCurrency(payment.amount)}
                       </TableCell>
                       {/* Intervalo */}
                       <TableCell className="hidden sm:table-cell">
@@ -496,6 +533,17 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
                       {/* Acciones */}
                       <TableCell className="text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {isActive && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 text-neon-yellow hover:text-neon-yellow hover:bg-neon-yellow/10"
+                              onClick={() => openBillDialog(payment)}
+                              title="Agregar Factura"
+                            >
+                              <FileText className="size-3.5" />
+                            </Button>
+                          )}
                           {isActive && (
                             <Button
                               variant="ghost"
@@ -573,25 +621,6 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
               <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={recurringForm.control}
-                  name="amount"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Monto</FormLabel>
-                      <FormControl>
-                        <Input
-                          type="number"
-                          placeholder="0"
-                          {...field}
-                          onChange={(e) => field.onChange(Number(e.target.value) || 0)}
-                          className="border-neon-cyan/20 focus:border-neon-cyan/50"
-                        />
-                      </FormControl>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={recurringForm.control}
                   name="interval"
                   render={({ field }) => (
                     <FormItem>
@@ -612,9 +641,6 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
                     </FormItem>
                   )}
                 />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
                 <FormField
                   control={recurringForm.control}
                   name="dueDay"
@@ -636,35 +662,36 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
                     </FormItem>
                   )}
                 />
-                <FormField
-                  control={recurringForm.control}
-                  name="categoryId"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Categoría</FormLabel>
-                      <Select
-                        onValueChange={field.onChange}
-                        defaultValue={field.value || '__none__'}
-                      >
-                        <FormControl>
-                          <SelectTrigger className="border-neon-cyan/20 focus:border-neon-cyan/50 w-full">
-                            <SelectValue placeholder="Sin categoría" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          <SelectItem value="__none__">Sin categoría</SelectItem>
-                          {expenseCategories.map((cat) => (
-                            <SelectItem key={cat.id} value={cat.id}>
-                              {cat.icon} {cat.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
               </div>
+
+              <FormField
+                control={recurringForm.control}
+                name="categoryId"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Categoría</FormLabel>
+                    <Select
+                      onValueChange={field.onChange}
+                      defaultValue={field.value || '__none__'}
+                    >
+                      <FormControl>
+                        <SelectTrigger className="border-neon-cyan/20 focus:border-neon-cyan/50 w-full">
+                          <SelectValue placeholder="Sin categoría" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="__none__">Sin categoría</SelectItem>
+                        {expenseCategories.map((cat) => (
+                          <SelectItem key={cat.id} value={cat.id}>
+                            {cat.icon} {cat.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
 
               <FormField
                 control={recurringForm.control}
@@ -731,6 +758,106 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
         </DialogContent>
       </Dialog>
 
+      {/* ─── Add Bill Dialog ─────────────────────────────────────── */}
+      <Dialog open={billDialogOpen} onOpenChange={setBillDialogOpen}>
+        <DialogContent className="bg-card border-neon-yellow/20 max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-neon-yellow">
+              Agregar Factura
+            </DialogTitle>
+            <DialogDescription>
+              {selectedRecurringForBill
+                ? `Crear factura para el recurrente "${selectedRecurringForBill.name}"`
+                : 'Crea una nueva factura asociada a un servicio'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={billForm.handleSubmit(onSubmitBill)} className="space-y-4">
+            {/* Servicio */}
+            <div className="space-y-2">
+              <Label>Servicio</Label>
+              <Select
+                value={billForm.watch('serviceAccountId') || ''}
+                onValueChange={(val) => billForm.setValue('serviceAccountId', val)}
+              >
+                <SelectTrigger className="border-neon-yellow/20 focus:border-neon-yellow/50 w-full">
+                  <SelectValue placeholder="Seleccionar servicio" />
+                </SelectTrigger>
+                <SelectContent>
+                  {serviceAccounts?.map((sa) => (
+                    <SelectItem key={sa.id} value={sa.id}>
+                      {sa.name} {sa.provider ? `- ${sa.provider}` : ''}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {billForm.formState.errors.serviceAccountId && (
+                <p className="text-xs text-destructive">{billForm.formState.errors.serviceAccountId.message}</p>
+              )}
+              {(!serviceAccounts || serviceAccounts.length === 0) && (
+                <p className="text-xs text-muted-foreground">No hay servicios registrados. Crea uno primero en la sección de Servicios.</p>
+              )}
+            </div>
+
+            {/* Monto */}
+            <div className="space-y-2">
+              <Label>Monto</Label>
+              <Input
+                type="number"
+                step="1"
+                placeholder="0"
+                {...billForm.register('amount')}
+                className="border-neon-yellow/20 focus-visible:border-neon-yellow/50"
+              />
+              {billForm.formState.errors.amount && (
+                <p className="text-xs text-destructive">{billForm.formState.errors.amount.message}</p>
+              )}
+            </div>
+
+            {/* Fecha de vencimiento */}
+            <div className="space-y-2">
+              <Label>Fecha de vencimiento</Label>
+              <Input
+                type="date"
+                {...billForm.register('dueDate')}
+                className="border-neon-yellow/20 focus-visible:border-neon-yellow/50"
+              />
+              {billForm.formState.errors.dueDate && (
+                <p className="text-xs text-destructive">{billForm.formState.errors.dueDate.message}</p>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setBillDialogOpen(false)}
+                className="border-neon-yellow/20"
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="submit"
+                disabled={submittingBill}
+                className="bg-neon-yellow/20 border border-neon-yellow/50 text-neon-yellow hover:bg-neon-yellow/30"
+              >
+                {submittingBill ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin mr-2" />
+                    Creando...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="size-4 mr-2" />
+                    Crear Factura
+                  </>
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* ─── Pay Confirmation Dialog ──────────────────────────────── */}
       <Dialog open={payDialogOpen} onOpenChange={setPayDialogOpen}>
         <DialogContent className="bg-card border-neon-green/20">
@@ -748,12 +875,6 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Nombre</span>
                 <span className="font-medium">{selectedRecurring.name}</span>
-              </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Monto</span>
-                <span className="text-neon-cyan font-semibold">
-                  {formatCurrency(selectedRecurring.amount)}
-                </span>
               </div>
               <div className="flex items-center justify-between text-sm">
                 <span className="text-muted-foreground">Próximo Vencimiento</span>
