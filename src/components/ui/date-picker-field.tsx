@@ -6,8 +6,8 @@ import { cn } from '@/lib/utils'
 
 /**
  * A date input field with a prominent neon-styled calendar button.
- * Wraps the native <input type="date"> with a visible clickable calendar icon
- * that stands out in the cyberpunk dark theme.
+ * The native calendar indicator is hidden and replaced with a custom
+ * neon-styled button that stands out in the cyberpunk dark theme.
  */
 const DatePickerField = forwardRef<
   HTMLInputElement,
@@ -17,6 +17,23 @@ const DatePickerField = forwardRef<
 >(({ className, accentColor, ...props }, ref) => {
   const color = accentColor || '#05d9e8'
   const colorRgb = hexToRgb(color)
+
+  const handleClick = () => {
+    // Find the input and trigger the native date picker
+    const input = (props.id
+      ? document.getElementById(props.id)
+      : ref && 'current' in ref
+        ? ref.current
+        : null) as HTMLInputElement | null
+    if (input) {
+      try {
+        input.showPicker()
+      } catch {
+        // Fallback: just focus the input
+        input.focus()
+      }
+    }
+  }
 
   return (
     <div className="relative flex items-center">
@@ -29,54 +46,29 @@ const DatePickerField = forwardRef<
           'dark:bg-input/30',
           'placeholder:text-muted-foreground',
           'disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-50',
+          // Hide the native calendar indicator - we use our custom button instead
+          '[&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:w-full [&::-webkit-calendar-picker-indicator]:h-full [&::-webkit-calendar-picker-indicator]:cursor-pointer',
           className
         )}
         style={{
           borderColor: `${color}33`,
           colorScheme: 'dark',
         }}
+        onClick={handleClick}
         {...props}
       />
-      {/* Prominent calendar button overlay */}
-      <button
-        type="button"
-        tabIndex={-1}
-        className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center justify-center size-7 rounded-md transition-all cursor-pointer"
+      {/* Prominent neon calendar button */}
+      <div
+        className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center justify-center size-7 rounded-md transition-all pointer-events-none"
         style={{
           backgroundColor: `${color}15`,
           border: `1px solid ${color}44`,
           color: color,
           boxShadow: `0 0 6px ${colorRgb ? `${colorRgb.r},${colorRgb.g},${colorRgb.b},0.2` : 'rgba(5,217,232,0.2)'}`,
         }}
-        onClick={() => {
-          // Find the input and trigger the native date picker
-          const input = (props.id
-            ? document.getElementById(props.id)
-            : ref && 'current' in ref
-              ? ref.current
-              : null) as HTMLInputElement | null
-          if (input) {
-            try {
-              input.showPicker()
-            } catch {
-              // Fallback: just focus the input
-              input.focus()
-            }
-          }
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.backgroundColor = `${color}30`
-          e.currentTarget.style.borderColor = `${color}66`
-          e.currentTarget.style.boxShadow = `0 0 10px ${colorRgb ? `${colorRgb.r},${colorRgb.g},${colorRgb.b},0.4` : 'rgba(5,217,232,0.4)'}`
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.backgroundColor = `${color}15`
-          e.currentTarget.style.borderColor = `${color}44`
-          e.currentTarget.style.boxShadow = `0 0 6px ${colorRgb ? `${colorRgb.r},${colorRgb.g},${colorRgb.b},0.2` : 'rgba(5,217,232,0.2)'}`
-        }}
       >
         <Calendar className="size-3.5" />
-      </button>
+      </div>
     </div>
   )
 })
