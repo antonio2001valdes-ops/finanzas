@@ -23,6 +23,7 @@ export interface DashboardData {
   savingsSummary: { totalTarget: number; totalCurrent: number; rate: number };
   accountSummaries: { id: string; name: string; type: string; balance: number; income: number; expenses: number; icon: string; color: string }[];
   upcomingDue: { id: string; name: string; dueDate: string; amount: number; daysRemaining: number; type: 'service' | 'recurring'; icon: string; color: string }[];
+  recurringSummary: { activeCount: number; totalAmount: number; paidThisMonth: number; pendingThisMonth: number; pendingCount: number };
 }
 
 export const dashboardService = {
@@ -55,7 +56,35 @@ export const dashboardService = {
     );
     const debtPaymentsTotal = debtPaymentsThisMonth.reduce((sum, p) => sum + p.amount, 0);
 
-    const adjustedExpenses = totalExpenses + servicePaymentsTotal + debtPaymentsTotal;
+    // ── Recurring payments for this month ──
+    const recurringPayments = await db.recurringPayments.toArray();
+    const activeRecurring = recurringPayments.filter((r) => r.isActive);
+
+    // Recurring payments due this month (nextDueDate falls within the month)
+    const recurringDueThisMonth = activeRecurring.filter(
+      (r) => r.nextDueDate >= startDate && r.nextDueDate <= endDate
+    );
+
+    // Recurring already paid this month (transactions with isRecurring=true in this month)
+    const paidRecurringThisMonth = expenseTransactions.filter((t) => t.isRecurring);
+    const paidRecurringTotal = paidRecurringThisMonth.reduce((sum, t) => sum + t.amount, 0);
+
+    // Recurring pending this month (due but not yet paid)
+    const paidRecurringNames = new Set(paidRecurringThisMonth.map((t) => t.description));
+    const pendingRecurring = recurringDueThisMonth.filter(
+      (r) => !paidRecurringNames.has(r.name)
+    );
+    const pendingRecurringTotal = pendingRecurring.reduce((sum, r) => sum + r.amount, 0);
+
+    const recurringSummary = {
+      activeCount: activeRecurring.length,
+      totalAmount: activeRecurring.reduce((sum, r) => sum + r.amount, 0),
+      paidThisMonth: paidRecurringTotal,
+      pendingThisMonth: pendingRecurringTotal,
+      pendingCount: pendingRecurring.length,
+    };
+
+    const adjustedExpenses = totalExpenses + servicePaymentsTotal + debtPaymentsTotal + pendingRecurringTotal;
     const balance = totalIncome - adjustedExpenses;
 
     // Savings total
@@ -241,7 +270,6 @@ export const dashboardService = {
 
     // ── Upcoming Due Items ──
     const serviceAccounts = await db.serviceAccounts.toArray();
-    const recurringPayments = await db.recurringPayments.toArray();
     const now = new Date().toISOString();
 
     const serviceDueItems = serviceBills
@@ -267,8 +295,8 @@ export const dashboardService = {
         };
       });
 
-    const recurringDueItems = recurringPayments
-      .filter((r) => r.isActive && r.nextDueDate >= now)
+    const recurringDueItems = activeRecurring
+      .filter((r) => r.nextDueDate >= now)
       .sort((a, b) => a.nextDueDate.localeCompare(b.nextDueDate))
       .slice(0, 5)
       .map((r) => {
@@ -314,6 +342,7 @@ export const dashboardService = {
       savingsSummary,
       accountSummaries,
       upcomingDue,
+      recurringSummary,
     };
   },
 };

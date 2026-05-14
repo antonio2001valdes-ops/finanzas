@@ -23,6 +23,7 @@ import {
   Target,
   Clock,
   ArrowLeftRight,
+  RefreshCw,
 } from 'lucide-react'
 import {
   LineChart,
@@ -390,7 +391,7 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
 
   // ── Combined income/expense for stat cards ──
   const totalIncomeCombined = data.totalIncome + data.serviceSummary.totalPaid + data.debtSummary.paidAmount
-  const totalExpensesCombined = data.totalExpenses + data.serviceSummary.pendingAmount + data.debtSummary.remainingAmount
+  const totalExpensesCombined = data.totalExpenses + data.serviceSummary.pendingAmount + data.debtSummary.remainingAmount + data.recurringSummary.pendingThisMonth
 
   return (
     <div className="p-4 md:p-6 space-y-5 overflow-y-auto cyber-scrollbar">
@@ -462,8 +463,8 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
         </div>
       </motion.div>
 
-      {/* ── 2. Stat Cards (2x3 Grid) ── */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      {/* ── 2. Stat Cards Grid ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         {/* Ingresos */}
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
           <Card className={`bg-card/80 backdrop-blur-sm border ${neonBorder('green')} hover:scale-[1.02] transition-transform`} style={{ boxShadow: neonShadow('green') }}>
@@ -500,7 +501,7 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
               <p className="text-xl font-bold text-neon-pink tabular-nums" style={{ textShadow: '0 0 8px rgba(255,42,109,0.4)' }}>
                 {formatCurrency(totalExpensesCombined)}
               </p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Transacciones + Servicios + Deudas</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Transacciones + Servicios + Deudas + Recurrentes</p>
             </CardContent>
             <div className="px-5 pb-2">
               <button onClick={() => onNavigate?.('transactions')} className="flex items-center gap-1 text-[10px] text-neon-pink/70 hover:text-neon-pink transition-colors">
@@ -614,6 +615,33 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
             </CardContent>
             <div className="px-5 pb-2">
               <button onClick={() => onNavigate?.('savings')} className="flex items-center gap-1 text-[10px] text-[#d300c5]/70 hover:text-[#d300c5] transition-colors">
+                Ver todo <ArrowRight className="size-2.5" />
+              </button>
+            </div>
+          </Card>
+        </motion.div>
+
+        {/* Recurrentes */}
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
+          <Card className={`bg-card/80 backdrop-blur-sm border ${neonBorder('cyan')} hover:scale-[1.02] transition-transform`} style={{ boxShadow: neonShadow('cyan') }}>
+            <CardHeader className="flex flex-row items-center justify-between pb-2 space-y-0">
+              <CardTitle className="text-xs font-medium text-muted-foreground">Recurrentes</CardTitle>
+              <div className="rounded-md p-1.5" style={{ backgroundColor: 'rgba(5,217,232,0.1)', boxShadow: '0 0 6px rgba(5,217,232,0.3)' }}>
+                <RefreshCw className="size-3.5 text-neon-cyan" />
+              </div>
+            </CardHeader>
+            <CardContent className="pt-0 pb-2">
+              <p className="text-xl font-bold text-neon-cyan tabular-nums" style={{ textShadow: '0 0 8px rgba(5,217,232,0.4)' }}>
+                {formatCurrency(data.recurringSummary.pendingThisMonth)}
+              </p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <span className="text-[10px] text-muted-foreground">{data.recurringSummary.activeCount} activo{data.recurringSummary.activeCount !== 1 ? 's' : ''}</span>
+                <span className="text-[10px] text-muted-foreground">-</span>
+                <span className="text-[10px] text-muted-foreground">{data.recurringSummary.pendingCount} pendiente{data.recurringSummary.pendingCount !== 1 ? 's' : ''} este mes</span>
+              </div>
+            </CardContent>
+            <div className="px-5 pb-2">
+              <button onClick={() => onNavigate?.('recurring')} className="flex items-center gap-1 text-[10px] text-neon-cyan/70 hover:text-neon-cyan transition-colors">
                 Ver todo <ArrowRight className="size-2.5" />
               </button>
             </div>
