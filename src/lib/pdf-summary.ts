@@ -26,17 +26,17 @@ const WHITE = 255
 
 export async function generateMonthlySummaryPDF(month: number, year: number): Promise<void> {
   const [fontRegular, fontBold] = await Promise.all([
-    loadFont('/fonts/SarasaMonoSC-Regular.ttf'),
-    loadFont('/fonts/SarasaMonoSC-Bold.ttf'),
+    loadFont('/fonts/LiberationSans-Regular.ttf'),
+    loadFont('/fonts/LiberationSans-Bold.ttf'),
   ])
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
 
-  doc.addFileToVFS('SM.ttf', fontRegular)
-  doc.addFileToVFS('SM-Bold.ttf', fontBold)
-  doc.addFont('SM.ttf', 'SM', 'normal')
-  doc.addFont('SM-Bold.ttf', 'SM', 'bold')
-  doc.setFont('SM')
+  doc.addFileToVFS('LS.ttf', fontRegular)
+  doc.addFileToVFS('LS-Bold.ttf', fontBold)
+  doc.addFont('LS.ttf', 'LS', 'normal')
+  doc.addFont('LS-Bold.ttf', 'LS', 'bold')
+  doc.setFont('LS')
 
   const W = doc.internal.pageSize.getWidth()
   const H = doc.internal.pageSize.getHeight()
@@ -103,7 +103,7 @@ export async function generateMonthlySummaryPDF(month: number, year: number): Pr
   // ── Helpers ──
 
   function txt(text: string, x: number, ty: number, gray: number, size: number, bold = false, align: 'left' | 'center' | 'right' = 'left') {
-    doc.setFont('SM', bold ? 'bold' : 'normal')
+    doc.setFont('LS', bold ? 'bold' : 'normal')
     doc.setFontSize(size)
     doc.setTextColor(gray)
     doc.text(text, x, ty, { align })
@@ -331,7 +331,7 @@ export async function generateMonthlySummaryPDF(month: number, year: number): Pr
   const pages = doc.getNumberOfPages()
   for (let i = 1; i <= pages; i++) {
     doc.setPage(i)
-    doc.setFont('SM', 'normal')
+    doc.setFont('LS', 'normal')
     doc.setFontSize(6)
     doc.setTextColor(DGRAY)
     doc.text('KHORVEN Finanzas Personales v3.2.0', M, H - 8)
