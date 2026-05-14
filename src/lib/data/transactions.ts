@@ -74,10 +74,9 @@ export const transactionService = {
     let categoryId = data.categoryId;
 
     if (!categoryId && data.description) {
-      const rules = await db.categorizationRules
-        .where('isActive')
-        .equals(1)
-        .sortBy('priority');
+      // Use orderBy('priority') instead of .where('isActive') because
+      // isActive is not an indexed keyPath in the current schema
+      const rules = await db.categorizationRules.orderBy('priority').toArray();
 
       for (const rule of rules) {
         if (!rule.isActive) continue;

@@ -213,6 +213,11 @@ db.version(1).stores({
   schemaVersions: 'id',
 });
 
+// v2: Add isActive index to categorizationRules for efficient querying
+db.version(2).stores({
+  categorizationRules: 'id, priority, isActive',
+});
+
 export { db };
 
 // ─── Helper Functions ───────────────────────────────────────────────
