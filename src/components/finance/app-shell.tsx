@@ -47,8 +47,8 @@ const pageVariants = {
   exit: { opacity: 0, y: -8 },
 }
 
-function PageRenderer({ page, currentMonth, currentYear }: { page: string; currentMonth: number; currentYear: number }) {
-  const pageMap: Record<string, React.ComponentType<{ currentMonth?: number; currentYear?: number }>> = {
+function PageRenderer({ page, currentMonth, currentYear, onMonthChange, onNavigate }: { page: string; currentMonth: number; currentYear: number; onMonthChange: (month: number, year: number) => void; onNavigate: (page: string) => void }) {
+  const pageMap: Record<string, React.ComponentType<{ currentMonth?: number; currentYear?: number; onMonthChange?: (month: number, year: number) => void; onNavigate?: (page: string) => void }>> = {
     dashboard: DashboardPage,
     transactions: TransactionsPage,
     accounts: AccountsPage,
@@ -74,7 +74,7 @@ function PageRenderer({ page, currentMonth, currentYear }: { page: string; curre
         transition={{ duration: 0.2, ease: 'easeOut' }}
         className="flex-1 overflow-auto"
       >
-        <PageComponent currentMonth={currentMonth} currentYear={currentYear} />
+        <PageComponent currentMonth={currentMonth} currentYear={currentYear} onMonthChange={onMonthChange} onNavigate={onNavigate} />
       </motion.div>
     </AnimatePresence>
   )
@@ -253,7 +253,7 @@ function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (op
 function AppShellInner() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
-  const { activePage } = useNavigation()
+  const { activePage, navigateTo } = useNavigation()
 
   const now = new Date()
   const [currentMonth, setCurrentMonth] = useState(now.getMonth() + 1)
@@ -316,6 +316,8 @@ function AppShellInner() {
           page={activePage}
           currentMonth={currentMonth}
           currentYear={currentYear}
+          onMonthChange={handleMonthYearChange}
+          onNavigate={navigateTo}
         />
       </main>
 
