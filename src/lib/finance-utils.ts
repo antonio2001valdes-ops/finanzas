@@ -10,11 +10,19 @@ export function formatCurrency(amount: number): string {
 // ─── Date Formatting ────────────────────────────────────────────────
 
 export function formatDate(dateStr: string): string {
+  // Extract date parts directly from the ISO string to avoid timezone offset issues.
+  // ISO format: "YYYY-MM-DDTHH:mm:ss.sssZ" or "YYYY-MM-DD"
+  const datePart = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr;
+  const [year, month, day] = datePart.split('-');
+  if (year && month && day) {
+    return `${day}/${month}/${year}`;
+  }
+  // Fallback for unexpected formats
   const date = new Date(dateStr);
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const year = date.getFullYear();
-  return `${day}/${month}/${year}`;
+  const d = String(date.getDate()).padStart(2, '0');
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const y = date.getFullYear();
+  return `${d}/${m}/${y}`;
 }
 
 export function formatMonthYear(month: number, year: number): string {

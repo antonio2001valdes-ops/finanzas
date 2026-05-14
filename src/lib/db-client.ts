@@ -223,6 +223,11 @@ db.version(3).stores({
   debts: 'id, status, name',
 });
 
+// v4: Add sourceRecurringId index to transactions for recurring payment history
+db.version(4).stores({
+  transactions: 'id, date, type, categoryType, categoryId, accountId, [categoryType+categoryId], sourceRecurringId',
+});
+
 export { db };
 
 // ─── Helper Functions ───────────────────────────────────────────────

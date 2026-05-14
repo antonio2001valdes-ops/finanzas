@@ -1,4 +1,4 @@
-import { db, generateId, nowISO, type RecurringPayment } from '@/lib/db-client';
+import { db, generateId, nowISO, type RecurringPayment, type Transaction } from '@/lib/db-client';
 import { transactionService } from './transactions';
 
 function calculateNextDueDate(dueDay: number, interval: string): string {
@@ -6,22 +6,24 @@ function calculateNextDueDate(dueDay: number, interval: string): string {
   let nextDate: Date;
 
   if (interval === 'monthly') {
-    nextDate = new Date(now.getFullYear(), now.getMonth(), dueDay);
+    // Use noon (12:00 local) to avoid timezone offset shifting the date
+    nextDate = new Date(now.getFullYear(), now.getMonth(), dueDay, 12, 0, 0);
     if (nextDate <= now) {
-      nextDate = new Date(now.getFullYear(), now.getMonth() + 1, dueDay);
+      nextDate = new Date(now.getFullYear(), now.getMonth() + 1, dueDay, 12, 0, 0);
     }
   } else if (interval === 'weekly') {
-    nextDate = new Date(now);
+    nextDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 12, 0, 0);
     nextDate.setDate(now.getDate() + (7 - now.getDay() + dueDay) % 7 || 7);
   } else if (interval === 'yearly') {
-    nextDate = new Date(now.getFullYear(), dueDay - 1, 1);
+    // dueDay here represents the month number (1-12) for yearly payments
+    nextDate = new Date(now.getFullYear(), dueDay - 1, 1, 12, 0, 0);
     if (nextDate <= now) {
-      nextDate = new Date(now.getFullYear() + 1, dueDay - 1, 1);
+      nextDate = new Date(now.getFullYear() + 1, dueDay - 1, 1, 12, 0, 0);
     }
   } else {
-    nextDate = new Date(now.getFullYear(), now.getMonth(), dueDay);
+    nextDate = new Date(now.getFullYear(), now.getMonth(), dueDay, 12, 0, 0);
     if (nextDate <= now) {
-      nextDate = new Date(now.getFullYear(), now.getMonth() + 1, dueDay);
+      nextDate = new Date(now.getFullYear(), now.getMonth() + 1, dueDay, 12, 0, 0);
     }
   }
 
@@ -42,7 +44,18 @@ function advanceNextDueDate(current: string, interval: string): string {
 
 export const recurringService = {
   async getAll(): Promise<RecurringPayment[]> {
-    return db.recurringPayments.orderBy('nextDueDate').toArray();
+    // Recalculate nextDueDate for any active recurring payments that are past due
+    const all = await db.recurringPayments.orderBy('nextDueDate').toArray();
+    const now = new Date();
+    for (const payment of all) {
+      if (payment.isActive && new Date(payment.nextDueDate) <= now) {
+        const nextDueDate = calculateNextDueDate(payment.dueDay, payment.interval);
+        await db.recurringPayments.update(payment.id, { nextDueDate, updatedAt: nowISO() });
+        // Update the in-memory object too
+        payment.nextDueDate = nextDueDate;
+      }
+    }
+    return all;
   },
 
   async create(data: Omit<RecurringPayment, 'id' | 'nextDueDate' | 'createdAt' | 'updatedAt'>): Promise<RecurringPayment> {
@@ -60,6 +73,15 @@ export const recurringService = {
   },
 
   async update(id: string, data: Partial<RecurringPayment>): Promise<void> {
+    // If dueDay or interval changed, recalculate nextDueDate
+    if (data.dueDay !== undefined || data.interval !== undefined) {
+      const current = await db.recurringPayments.get(id);
+      if (current) {
+        const dueDay = data.dueDay ?? current.dueDay;
+        const interval = data.interval ?? current.interval;
+        data.nextDueDate = calculateNextDueDate(dueDay, interval);
+      }
+    }
     await db.recurringPayments.update(id, {
       ...data,
       updatedAt: nowISO(),
@@ -101,5 +123,13 @@ export const recurringService = {
       nextDueDate,
       updatedAt: nowISO(),
     });
+  },
+
+  async getPaymentHistory(recurringId: string): Promise<Transaction[]> {
+    // Find all transactions linked to this recurring payment via sourceRecurringId
+    const allTransactions = await db.transactions.toArray();
+    return allTransactions
+      .filter((t) => t.sourceRecurringId === recurringId)
+      .sort((a, b) => b.date.localeCompare(a.date));
   },
 };
