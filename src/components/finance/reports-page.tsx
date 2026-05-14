@@ -383,7 +383,7 @@ export function ReportsPage({ currentMonth, currentYear, onMonthChange, onNaviga
       if (!file) return
       try {
         const text = await file.text()
-        await backupService.import(text)
+        await backupService.restore(text)
         toast.success('Backup restaurado exitosamente')
         window.location.reload()
       } catch {
