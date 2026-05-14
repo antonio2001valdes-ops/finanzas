@@ -24,6 +24,7 @@ export interface DashboardData {
   accountSummaries: { id: string; name: string; type: string; balance: number; income: number; expenses: number; icon: string; color: string }[];
   upcomingDue: { id: string; name: string; dueDate: string; amount: number; daysRemaining: number; type: 'service' | 'recurring'; icon: string; color: string }[];
   recurringSummary: { activeCount: number; totalAmount: number; paidThisMonth: number; pendingThisMonth: number; pendingCount: number };
+  debtPaymentsTotal: number;
 }
 
 export const dashboardService = {
@@ -84,7 +85,9 @@ export const dashboardService = {
       pendingCount: pendingRecurring.length,
     };
 
-    const adjustedExpenses = totalExpenses + servicePaymentsTotal + debtPaymentsTotal + pendingRecurringTotal;
+    // adjustedExpenses: totalExpenses already includes paid service bills (via transactions) and paid recurring (via transactions)
+    // We only add pending items that don't have transactions yet
+    const adjustedExpenses = totalExpenses + pendingRecurringTotal;
     const balance = totalIncome - adjustedExpenses;
 
     // Savings total
@@ -343,6 +346,7 @@ export const dashboardService = {
       accountSummaries,
       upcomingDue,
       recurringSummary,
+      debtPaymentsTotal,
     };
   },
 };

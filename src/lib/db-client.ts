@@ -48,6 +48,8 @@ export interface Transaction {
   tags?: string;
   parentTransactionId?: string;
   splitIndex?: number;
+  sourceBillId?: string;
+  sourceRecurringId?: string;
   date: string;
   createdAt: string;
   updatedAt: string;

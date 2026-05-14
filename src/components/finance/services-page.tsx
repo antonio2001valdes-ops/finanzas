@@ -24,9 +24,9 @@ import {
   StickyNote,
 } from 'lucide-react'
 
-import { serviceService, categoryService, useAsyncData } from '@/lib/data'
+import { serviceService, categoryService, accountService, useAsyncData } from '@/lib/data'
 import { formatCurrency, formatDate } from '@/lib/finance-utils'
-import type { ServiceAccount, ServiceBill, ExpenseCategory } from '@/lib/db-client'
+import type { ServiceAccount, ServiceBill, ExpenseCategory, Account } from '@/lib/db-client'
 
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -137,6 +137,15 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
   // Bill dialog state
   const [billDialogOpen, setBillDialogOpen] = useState(false)
   const [billAccountId, setBillAccountId] = useState<string | null>(null)
+
+  // Pay bill dialog state
+  const [payBillDialogOpen, setPayBillDialogOpen] = useState(false)
+  const [payingBillId, setPayingBillId] = useState<string | null>(null)
+  const [payBillAccountId, setPayBillAccountId] = useState<string>('')
+  const [payingBill, setPayingBill] = useState(false)
+
+  // Accounts for pay dialog
+  const { data: bankAccounts } = useAsyncData<Account[]>(() => accountService.getAll(), [])
 
   // Expanded accounts for bills
   const [expandedAccounts, setExpandedAccounts] = useState<Set<string>>(new Set())
@@ -284,13 +293,25 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
 
   // ─── Pay / Unpay Bill ───────────────────────────────────────────
 
-  const handlePayBill = async (billId: string) => {
+  const openPayBillDialog = (billId: string) => {
+    setPayingBillId(billId)
+    setPayBillAccountId(bankAccounts?.[0]?.id ?? '')
+    setPayBillDialogOpen(true)
+  }
+
+  const handlePayBill = async () => {
+    if (!payingBillId || !payBillAccountId) return
+    setPayingBill(true)
     try {
-      await serviceService.payBill(billId)
+      await serviceService.payBill(payingBillId, payBillAccountId)
       toast.success('Factura pagada')
+      setPayBillDialogOpen(false)
+      setPayingBillId(null)
       refresh()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'No se pudo pagar la factura.')
+    } finally {
+      setPayingBill(false)
     }
   }
 
@@ -529,7 +550,7 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
                               </div>
                               <BillsSubTable
                                 accountId={account.id}
-                                onPayBill={handlePayBill}
+                                onPayBill={openPayBillDialog}
                                 onUnpayBill={handleUnpayBill}
                                 refreshKey={refreshKey}
                               />
@@ -768,6 +789,71 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Pay Bill Dialog (select account) ──────────────────────────── */}
+      <Dialog open={payBillDialogOpen} onOpenChange={setPayBillDialogOpen}>
+        <DialogContent className="border-neon-green/20 sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-neon-green">Pagar Factura</DialogTitle>
+            <DialogDescription>
+              Selecciona la cuenta desde la cual pagar esta factura.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            <div className="grid gap-2">
+              <Label>Cuenta de Pago</Label>
+              <Select
+                value={payBillAccountId}
+                onValueChange={setPayBillAccountId}
+              >
+                <SelectTrigger className="border-neon-green/20 focus:border-neon-green/50 w-full">
+                  <SelectValue placeholder="Seleccionar cuenta" />
+                </SelectTrigger>
+                <SelectContent>
+                  {bankAccounts?.map((acct) => (
+                    <SelectItem key={acct.id} value={acct.id}>
+                      <span className="flex items-center gap-2">
+                        {acct.icon} {acct.name} ({formatCurrency(acct.balance)})
+                      </span>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {(!bankAccounts || bankAccounts.length === 0) && (
+                <p className="text-xs text-muted-foreground">No hay cuentas registradas. Crea una primero.</p>
+              )}
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setPayBillDialogOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handlePayBill}
+              disabled={payingBill || !payBillAccountId}
+              className="bg-neon-green/20 border border-neon-green/50 text-neon-green hover:bg-neon-green/30"
+            >
+              {payingBill ? (
+                <>
+                  <Loader2 className="size-4 animate-spin mr-2" />
+                  Pagando...
+                </>
+              ) : (
+                <>
+                  <Banknote className="size-4 mr-2" />
+                  Confirmar Pago
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

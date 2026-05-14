@@ -1,4 +1,5 @@
-import { db, generateId, nowISO, type ServiceAccount, type ServiceBill } from '@/lib/db-client';
+import { db, generateId, nowISO, type ServiceAccount, type ServiceBill, type Transaction } from '@/lib/db-client';
+import { transactionService } from './transactions';
 
 export const serviceService = {
   async getAllAccounts(): Promise<ServiceAccount[]> {
@@ -24,7 +25,29 @@ export const serviceService = {
   },
 
   async deleteAccount(id: string): Promise<void> {
-    await db.transaction('rw', [db.serviceAccounts, db.serviceBills], async () => {
+    await db.transaction('rw', [db.serviceAccounts, db.serviceBills, db.transactions], async () => {
+      // Find and delete transactions linked to this account's bills
+      const bills = await db.serviceBills.where('serviceAccountId').equals(id).toArray();
+      for (const bill of bills) {
+        if (bill.paid) {
+          // Find the transaction linked to this bill
+          const linkedTx = await db.transactions.where('type').equals('expense').toArray();
+          const txToDelete = linkedTx.find((t) => t.sourceBillId === bill.id);
+          if (txToDelete) {
+            // Restore account balance
+            if (txToDelete.accountId) {
+              const acct = await db.accounts.get(txToDelete.accountId);
+              if (acct) {
+                await db.accounts.update(txToDelete.accountId, {
+                  balance: acct.balance + txToDelete.amount,
+                  updatedAt: nowISO(),
+                });
+              }
+            }
+            await db.transactions.delete(txToDelete.id);
+          }
+        }
+      }
       await db.serviceBills.where('serviceAccountId').equals(id).delete();
       await db.serviceAccounts.delete(id);
     });
@@ -47,66 +70,49 @@ export const serviceService = {
     return bill;
   },
 
-  async payBill(billId: string): Promise<void> {
-    await db.transaction('rw', [db.serviceBills, db.transactions, db.accounts, db.serviceAccounts], async () => {
-      const bill = await db.serviceBills.get(billId);
-      if (!bill) throw new Error('Boleta no encontrada');
+  async payBill(billId: string, accountId: string): Promise<void> {
+    const bill = await db.serviceBills.get(billId);
+    if (!bill) throw new Error('Boleta no encontrada');
 
-      // Create expense transaction
-      const serviceAccount = await db.serviceAccounts.get(bill.serviceAccountId);
-      const transaction = {
-        id: generateId(),
-        type: 'expense',
-        amount: bill.amount,
-        description: `Servicio: ${serviceAccount?.name ?? 'Desconocido'}`,
-        categoryType: 'expense' as const,
-        categoryId: serviceAccount?.categoryId,
-        isRecurring: false,
-        date: nowISO(),
-        createdAt: nowISO(),
-        updatedAt: nowISO(),
-      };
+    const serviceAccount = await db.serviceAccounts.get(bill.serviceAccountId);
 
-      await db.transactions.add(transaction);
+    // Use transactionService.create() which updates account balance automatically
+    await transactionService.create({
+      type: 'expense',
+      amount: bill.amount,
+      description: `Servicio: ${serviceAccount?.name ?? 'Desconocido'}`,
+      categoryType: 'expense',
+      categoryId: serviceAccount?.categoryId,
+      accountId,
+      isRecurring: false,
+      sourceBillId: billId,
+      date: nowISO(),
+    });
 
-      // Mark bill as paid
-      await db.serviceBills.update(billId, {
-        paid: true,
-        paidDate: nowISO(),
-      });
+    // Mark bill as paid
+    await db.serviceBills.update(billId, {
+      paid: true,
+      paidDate: nowISO(),
     });
   },
 
   async unpayBill(billId: string): Promise<void> {
-    await db.transaction('rw', [db.serviceBills, db.transactions, db.serviceAccounts], async () => {
-      const bill = await db.serviceBills.get(billId);
-      if (!bill) throw new Error('Boleta no encontrada');
+    const bill = await db.serviceBills.get(billId);
+    if (!bill) throw new Error('Boleta no encontrada');
 
-      // Find and delete the associated transaction
-      const serviceAccount = await db.serviceAccounts.get(bill.serviceAccountId);
-      const description = `Servicio: ${serviceAccount?.name ?? 'Desconocido'}`;
+    // Find the transaction linked to this bill via sourceBillId
+    const allTransactions = await db.transactions.toArray();
+    const linkedTx = allTransactions.find((t) => t.sourceBillId === billId);
 
-      const matchingTransactions = await db.transactions
-        .where('type')
-        .equals('expense')
-        .toArray();
+    if (linkedTx) {
+      // Use transactionService.delete() which restores account balance automatically
+      await transactionService.delete(linkedTx.id);
+    }
 
-      const transactionToDelete = matchingTransactions.find(
-        (t) =>
-          t.description === description &&
-          t.amount === bill.amount &&
-          t.date === bill.paidDate
-      );
-
-      if (transactionToDelete) {
-        await db.transactions.delete(transactionToDelete.id);
-      }
-
-      // Mark bill as unpaid
-      await db.serviceBills.update(billId, {
-        paid: false,
-        paidDate: undefined,
-      });
+    // Mark bill as unpaid
+    await db.serviceBills.update(billId, {
+      paid: false,
+      paidDate: undefined,
     });
   },
 };

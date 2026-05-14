@@ -390,8 +390,8 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
   }
 
   // ── Combined income/expense for stat cards ──
-  const totalIncomeCombined = data.totalIncome + data.serviceSummary.totalPaid + data.debtSummary.paidAmount
-  const totalExpensesCombined = data.totalExpenses + data.serviceSummary.pendingAmount + data.debtSummary.remainingAmount + data.recurringSummary.pendingThisMonth
+  const totalIncomeCombined = data.totalIncome
+  const totalExpensesCombined = data.totalExpenses + data.serviceSummary.pendingAmount + data.debtPaymentsTotal + data.recurringSummary.pendingThisMonth
 
   return (
     <div className="p-4 md:p-6 space-y-5 overflow-y-auto cyber-scrollbar">
@@ -478,7 +478,7 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
               <p className="text-xl font-bold text-neon-green tabular-nums" style={{ textShadow: '0 0 8px rgba(1,255,137,0.4)' }}>
                 {formatCurrency(totalIncomeCombined)}
               </p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Transacciones + Servicios + Deudas</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Ingresos del mes</p>
             </CardContent>
             <div className="px-5 pb-2">
               <button onClick={() => onNavigate?.('transactions')} className="flex items-center gap-1 text-[10px] text-neon-green/70 hover:text-neon-green transition-colors">
@@ -501,7 +501,7 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
               <p className="text-xl font-bold text-neon-pink tabular-nums" style={{ textShadow: '0 0 8px rgba(255,42,109,0.4)' }}>
                 {formatCurrency(totalExpensesCombined)}
               </p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">Transacciones + Servicios + Deudas + Recurrentes</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Transacciones + Servicios pendientes + Deudas + Recurrentes</p>
             </CardContent>
             <div className="px-5 pb-2">
               <button onClick={() => onNavigate?.('transactions')} className="flex items-center gap-1 text-[10px] text-neon-pink/70 hover:text-neon-pink transition-colors">

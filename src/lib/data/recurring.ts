@@ -1,4 +1,5 @@
 import { db, generateId, nowISO, type RecurringPayment } from '@/lib/db-client';
+import { transactionService } from './transactions';
 
 function calculateNextDueDate(dueDay: number, interval: string): string {
   const now = new Date();
@@ -69,34 +70,29 @@ export const recurringService = {
     await db.recurringPayments.delete(id);
   },
 
-  async pay(id: string): Promise<void> {
-    await db.transaction('rw', [db.recurringPayments, db.transactions, db.accounts], async () => {
-      const recurring = await db.recurringPayments.get(id);
-      if (!recurring) throw new Error('Pago recurrente no encontrado');
+  async pay(id: string, accountId: string): Promise<void> {
+    const recurring = await db.recurringPayments.get(id);
+    if (!recurring) throw new Error('Pago recurrente no encontrado');
 
-      // Create expense transaction
-      const transaction = {
-        id: generateId(),
-        type: 'expense',
-        amount: recurring.amount,
-        description: recurring.name,
-        categoryType: 'expense' as const,
-        categoryId: recurring.categoryId,
-        isRecurring: true,
-        tags: 'recurrente',
-        date: nowISO(),
-        createdAt: nowISO(),
-        updatedAt: nowISO(),
-      };
+    // Use transactionService.create() which updates account balance automatically
+    await transactionService.create({
+      type: 'expense',
+      amount: recurring.amount,
+      description: recurring.name,
+      categoryType: 'expense',
+      categoryId: recurring.categoryId,
+      accountId,
+      isRecurring: true,
+      tags: 'recurrente',
+      sourceRecurringId: id,
+      date: nowISO(),
+    });
 
-      await db.transactions.add(transaction);
-
-      // Advance next due date
-      const nextDueDate = advanceNextDueDate(recurring.nextDueDate, recurring.interval);
-      await db.recurringPayments.update(id, {
-        nextDueDate,
-        updatedAt: nowISO(),
-      });
+    // Advance next due date
+    const nextDueDate = advanceNextDueDate(recurring.nextDueDate, recurring.interval);
+    await db.recurringPayments.update(id, {
+      nextDueDate,
+      updatedAt: nowISO(),
     });
   },
 };
