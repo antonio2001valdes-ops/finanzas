@@ -218,6 +218,11 @@ db.version(2).stores({
   categorizationRules: 'id, priority, isActive',
 });
 
+// v3: Add name index to debts for sorting
+db.version(3).stores({
+  debts: 'id, status, name',
+});
+
 export { db };
 
 // ─── Helper Functions ───────────────────────────────────────────────

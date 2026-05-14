@@ -3,7 +3,8 @@ import { transactionService } from './transactions';
 
 export const debtService = {
   async getAll(): Promise<Debt[]> {
-    return db.debts.orderBy('name').toArray();
+    const debts = await db.debts.toArray();
+    return debts.sort((a, b) => a.name.localeCompare(b.name));
   },
 
   async create(data: Omit<Debt, 'id' | 'createdAt' | 'updatedAt'>): Promise<Debt> {
