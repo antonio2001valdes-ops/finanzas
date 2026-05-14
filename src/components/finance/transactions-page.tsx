@@ -21,7 +21,6 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Label } from '@/components/ui/label'
 import {
@@ -67,7 +66,7 @@ import {
   transferService,
   useAsyncData,
 } from '@/lib/data'
-import { formatCurrency, formatDate, TRANSACTION_TYPES, ACCOUNT_TYPES } from '@/lib/finance-utils'
+import { formatCurrency, formatDate, TRANSACTION_TYPES } from '@/lib/finance-utils'
 import type { Transaction, Account, IncomeCategory, ExpenseCategory } from '@/lib/db-client'
 
 // ─── Zod Schemas ──────────────────────────────────────────────────
@@ -109,6 +108,23 @@ const splitSchema = z.object({
 })
 
 type SplitFormValues = z.infer<typeof splitSchema>
+
+// ─── Category Badge ────────────────────────────────────────────────
+
+function CategoryBadge({ name, color }: { name: string; color: string }) {
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+      style={{
+        backgroundColor: color + '33',
+        border: `1px solid ${color}66`,
+        color: color,
+      }}
+    >
+      {name}
+    </span>
+  )
+}
 
 // ─── Component ────────────────────────────────────────────────────
 
@@ -167,11 +183,13 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
     []
   )
 
-  // ── Category lookup map ──
-  const categoryMap = useCallback(() => {
-    const map: Record<string, string> = {}
-    for (const c of incomeCategories ?? []) map[c.id] = c.name
-    for (const c of expenseCategories ?? []) map[c.id] = c.name
+  // ── Category lookup map with color ──
+  const categoryLookup = useCallback(() => {
+    const map: Record<string, { name: string; color: string }> = {}
+    for (const c of incomeCategories ?? [])
+      map[c.id] = { name: c.name, color: c.color || '#01ff89' }
+    for (const c of expenseCategories ?? [])
+      map[c.id] = { name: c.name, color: c.color || '#ff2a6d' }
     return map
   }, [incomeCategories, expenseCategories])
 
@@ -363,7 +381,6 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
     }
     setSubmitting(true)
     try {
-      // Update the original transaction with split info
       await transactionService.update(splittingTx.id, {
         parentTransactionId: splittingTx.id,
         splitIndex: 0,
@@ -372,7 +389,6 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
         description: values.splits[0].description,
       })
 
-      // Create child splits
       for (let i = 1; i < values.splits.length; i++) {
         await transactionService.create({
           type: splittingTx.type,
@@ -403,9 +419,9 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
   const totalPages = Math.ceil((txResult?.total ?? 0) / pageSize)
 
   const amountColor = (tx: Transaction) => {
-    if (tx.type === 'income') return 'text-neon-green'
-    if (tx.type === 'expense') return 'text-neon-pink'
-    return 'text-neon-blue'
+    if (tx.type === 'income') return '#01ff89'
+    if (tx.type === 'expense') return '#ff2a6d'
+    return '#05d9e8'
   }
 
   const amountPrefix = (tx: Transaction) => {
@@ -415,18 +431,19 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
   }
 
   const categories = watchedType === 'income' ? incomeCategories : expenseCategories
-  const catMap = categoryMap()
+  const catLookup = categoryLookup()
   const accMap = accountMap()
 
   return (
     <div className="page-enter p-4 md:p-6 space-y-4 overflow-auto">
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h1 className="text-2xl font-bold text-neon-blue">Transacciones</h1>
+        <h1 className="text-2xl font-bold text-neon-cyan">Transacciones</h1>
         <div className="flex gap-2 flex-wrap">
           <Button
             onClick={openCreate}
-            className="bg-neon-blue text-black hover:bg-neon-blue/80 shadow-neon-blue"
+            className="bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/30"
+            style={{ boxShadow: '0 0 10px #05d9e820' }}
           >
             <Plus className="size-4" />
             Nueva Transacción
@@ -437,7 +454,7 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
               transferForm.reset()
               setTransferDialogOpen(true)
             }}
-            className="border-neon-blue/30 text-neon-blue hover:bg-neon-blue/10"
+            className="border-neon-cyan/30 text-neon-cyan hover:bg-neon-cyan/10"
           >
             <ArrowRightLeft className="size-4" />
             Nueva Transferencia
@@ -446,16 +463,22 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
       </div>
 
       {/* ── Filter Bar ── */}
-      <Card className="border-neon-blue/10 bg-card/50 backdrop-blur-sm">
+      <Card className="border-neon-cyan/10 bg-card/50 backdrop-blur-sm">
         <CardContent className="p-4 space-y-3">
           <div className="flex flex-col sm:flex-row gap-3">
             {/* Type Tabs */}
             <Tabs value={typeFilter} onValueChange={setTypeFilter}>
               <TabsList className="bg-muted/50">
                 <TabsTrigger value="all">Todos</TabsTrigger>
-                <TabsTrigger value="income">Ingreso</TabsTrigger>
-                <TabsTrigger value="expense">Gasto</TabsTrigger>
-                <TabsTrigger value="transfer">Transferencia</TabsTrigger>
+                <TabsTrigger value="income" className="data-[state=active]:text-[#01ff89]">
+                  Ingreso
+                </TabsTrigger>
+                <TabsTrigger value="expense" className="data-[state=active]:text-[#ff2a6d]">
+                  Gasto
+                </TabsTrigger>
+                <TabsTrigger value="transfer" className="data-[state=active]:text-[#05d9e8]">
+                  Transferencia
+                </TabsTrigger>
               </TabsList>
             </Tabs>
 
@@ -466,7 +489,7 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
                 placeholder="Buscar transacciones..."
                 value={searchFilter}
                 onChange={(e) => setSearchFilter(e.target.value)}
-                className="pl-8 border-neon-blue/20 focus-visible:border-neon-blue/50"
+                className="pl-8 border-neon-cyan/20 focus-visible:border-neon-cyan/50"
               />
             </div>
           </div>
@@ -474,7 +497,7 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
           <div className="flex flex-col sm:flex-row gap-3">
             {/* Category Filter */}
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-              <SelectTrigger className="w-full sm:w-[200px] border-neon-blue/20">
+              <SelectTrigger className="w-full sm:w-[200px] border-neon-cyan/20">
                 <SelectValue placeholder="Categoría" />
               </SelectTrigger>
               <SelectContent>
@@ -494,7 +517,7 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
 
             {/* Account Filter */}
             <Select value={accountFilter} onValueChange={setAccountFilter}>
-              <SelectTrigger className="w-full sm:w-[200px] border-neon-blue/20">
+              <SelectTrigger className="w-full sm:w-[200px] border-neon-cyan/20">
                 <SelectValue placeholder="Cuenta" />
               </SelectTrigger>
               <SelectContent>
@@ -511,11 +534,14 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
       </Card>
 
       {/* ── Transaction Table ── */}
-      <Card className="border-neon-blue/10 bg-card/50 backdrop-blur-sm">
+      <Card
+        className="border-neon-cyan/10 bg-card/50 backdrop-blur-sm"
+        style={{ boxShadow: '0 0 15px #05d9e810' }}
+      >
         <CardContent className="p-0">
           {txLoading ? (
             <div className="flex items-center justify-center py-16">
-              <Loader2 className="size-8 animate-spin text-neon-blue" />
+              <Loader2 className="size-8 animate-spin text-neon-cyan" />
               <span className="ml-3 text-muted-foreground">Cargando transacciones...</span>
             </div>
           ) : !txResult?.data?.length ? (
@@ -528,106 +554,116 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
             <>
               <Table>
                 <TableHeader>
-                  <TableRow className="border-neon-blue/10 hover:bg-transparent">
-                    <TableHead className="text-neon-blue/70">Fecha</TableHead>
-                    <TableHead className="text-neon-blue/70">Descripción</TableHead>
-                    <TableHead className="text-neon-blue/70 hidden md:table-cell">Categoría</TableHead>
-                    <TableHead className="text-neon-blue/70 hidden sm:table-cell">Cuenta</TableHead>
-                    <TableHead className="text-neon-blue/70 text-right">Monto</TableHead>
-                    <TableHead className="text-neon-blue/70 text-right">Acciones</TableHead>
+                  <TableRow className="border-neon-cyan/10 hover:bg-transparent">
+                    <TableHead className="text-muted-foreground">Fecha</TableHead>
+                    <TableHead className="text-muted-foreground">Descripción</TableHead>
+                    <TableHead className="text-muted-foreground hidden md:table-cell">Categoría</TableHead>
+                    <TableHead className="text-muted-foreground hidden sm:table-cell">Cuenta</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Monto</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Acciones</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {txResult.data.map((tx) => (
-                    <TableRow
-                      key={tx.id}
-                      className="border-neon-blue/5 hover:bg-neon-blue/5 transition-colors"
-                    >
-                      <TableCell className="text-xs text-muted-foreground">
-                        {formatDate(tx.date)}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <span className="truncate max-w-[180px]">{tx.description}</span>
-                          {tx.parentTransactionId && (
-                            <Badge
-                              variant="outline"
-                              className="text-[10px] border-neon-purple/40 text-neon-purple"
-                            >
-                              Split
-                            </Badge>
+                  {txResult.data.map((tx) => {
+                    const catInfo = tx.categoryId ? catLookup[tx.categoryId] : null
+
+                    return (
+                      <TableRow
+                        key={tx.id}
+                        className="border-neon-cyan/5 hover:bg-neon-cyan/5 transition-colors"
+                      >
+                        <TableCell className="text-xs text-muted-foreground">
+                          {formatDate(tx.date)}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className="truncate max-w-[180px]">{tx.description}</span>
+                            {tx.parentTransactionId && (
+                              <span
+                                className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold"
+                                style={{
+                                  backgroundColor: '#d300c520',
+                                  border: '1px solid #d300c544',
+                                  color: '#d300c5',
+                                }}
+                              >
+                                Split
+                              </span>
+                            )}
+                            {tx.type === 'transfer' && (
+                              <span
+                                className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-bold"
+                                style={{
+                                  backgroundColor: '#05d9e820',
+                                  border: '1px solid #05d9e844',
+                                  color: '#05d9e8',
+                                }}
+                              >
+                                ↕
+                              </span>
+                            )}
+                          </div>
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell">
+                          {catInfo ? (
+                            <CategoryBadge name={catInfo.name} color={catInfo.color} />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
                           )}
-                          {tx.type === 'transfer' && (
-                            <Badge
-                              variant="outline"
-                              className="text-[10px] border-neon-blue/40 text-neon-blue"
-                            >
-                              ↕
-                            </Badge>
-                          )}
-                        </div>
-                      </TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        {tx.categoryId ? (
-                          <Badge
-                            variant="outline"
-                            className="text-xs border-neon-blue/20"
-                          >
-                            {catMap[tx.categoryId] || 'Sin categoría'}
-                          </Badge>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell text-xs text-muted-foreground">
-                        {tx.accountId ? accMap[tx.accountId] || '—' : '—'}
-                      </TableCell>
-                      <TableCell className={`text-right font-mono font-semibold ${amountColor(tx)}`}>
-                        {amountPrefix(tx)}{formatCurrency(tx.amount)}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1">
-                          {tx.type !== 'transfer' && !tx.parentTransactionId && (
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell text-xs text-muted-foreground">
+                          {tx.accountId ? accMap[tx.accountId] || '—' : '—'}
+                        </TableCell>
+                        <TableCell
+                          className="text-right font-mono font-semibold"
+                          style={{ color: amountColor(tx) }}
+                        >
+                          {amountPrefix(tx)}{formatCurrency(tx.amount)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            {tx.type !== 'transfer' && !tx.parentTransactionId && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-7 text-muted-foreground hover:text-neon-purple"
+                                onClick={() => openSplit(tx)}
+                                title="Dividir"
+                              >
+                                <Split className="size-3.5" />
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="size-7 text-muted-foreground hover:text-neon-purple"
-                              onClick={() => openSplit(tx)}
-                              title="Dividir"
+                              className="size-7 text-muted-foreground hover:text-neon-blue"
+                              onClick={() => openEdit(tx)}
+                              title="Editar"
                             >
-                              <Split className="size-3.5" />
+                              <Pencil className="size-3.5" />
                             </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-7 text-muted-foreground hover:text-neon-blue"
-                            onClick={() => openEdit(tx)}
-                            title="Editar"
-                          >
-                            <Pencil className="size-3.5" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="size-7 text-muted-foreground hover:text-neon-pink"
-                            onClick={() => {
-                              setDeletingTxId(tx.id)
-                              setDeleteDialogOpen(true)
-                            }}
-                            title="Eliminar"
-                          >
-                            <Trash2 className="size-3.5" />
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 text-muted-foreground hover:text-neon-pink"
+                              onClick={() => {
+                                setDeletingTxId(tx.id)
+                                setDeleteDialogOpen(true)
+                              }}
+                              title="Eliminar"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
                 </TableBody>
               </Table>
 
               {/* Pagination */}
-              <div className="flex items-center justify-between px-4 py-3 border-t border-neon-blue/10">
+              <div className="flex items-center justify-between px-4 py-3 border-t border-neon-cyan/10">
                 <span className="text-xs text-muted-foreground">
                   {txResult.total} transacción{txResult.total !== 1 ? 'es' : ''}
                 </span>
@@ -637,7 +673,7 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
                     size="sm"
                     disabled={page <= 1}
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    className="border-neon-blue/20 size-8"
+                    className="border-neon-cyan/20 size-8"
                   >
                     <ChevronLeft className="size-4" />
                   </Button>
@@ -649,7 +685,7 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
                     size="sm"
                     disabled={page >= totalPages}
                     onClick={() => setPage((p) => p + 1)}
-                    className="border-neon-blue/20 size-8"
+                    className="border-neon-cyan/20 size-8"
                   >
                     <ChevronRight className="size-4" />
                   </Button>
@@ -662,9 +698,9 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
 
       {/* ── Create/Edit Transaction Dialog ── */}
       <Dialog open={txDialogOpen} onOpenChange={setTxDialogOpen}>
-        <DialogContent className="sm:max-w-lg border-neon-blue/20 bg-card">
+        <DialogContent className="sm:max-w-lg border-neon-cyan/20 bg-card">
           <DialogHeader>
-            <DialogTitle className="text-neon-blue">
+            <DialogTitle className="text-neon-cyan">
               {editingTx ? 'Editar Transacción' : 'Nueva Transacción'}
             </DialogTitle>
             <DialogDescription>
@@ -683,7 +719,7 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
                   value={txForm.watch('type')}
                   onValueChange={(val) => txForm.setValue('type', val)}
                 >
-                  <SelectTrigger className="border-neon-blue/20">
+                  <SelectTrigger className="border-neon-cyan/20">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -702,7 +738,7 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
                   min="1"
                   placeholder="0"
                   {...txForm.register('amount')}
-                  className="border-neon-blue/20 focus-visible:border-neon-blue/50"
+                  className="border-neon-cyan/20 focus-visible:border-neon-cyan/50"
                 />
                 {txForm.formState.errors.amount && (
                   <p className="text-xs text-destructive">
@@ -718,7 +754,7 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
               <Input
                 placeholder="Descripción de la transacción"
                 {...txForm.register('description')}
-                className="border-neon-blue/20 focus-visible:border-neon-blue/50"
+                className="border-neon-cyan/20 focus-visible:border-neon-cyan/50"
               />
               {txForm.formState.errors.description && (
                 <p className="text-xs text-destructive">
@@ -735,7 +771,7 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
                   value={txForm.watch('categoryId') || ''}
                   onValueChange={(val) => txForm.setValue('categoryId', val)}
                 >
-                  <SelectTrigger className="border-neon-blue/20">
+                  <SelectTrigger className="border-neon-cyan/20">
                     <SelectValue placeholder="Seleccionar" />
                   </SelectTrigger>
                   <SelectContent>
@@ -755,7 +791,7 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
                   value={txForm.watch('accountId') || ''}
                   onValueChange={(val) => txForm.setValue('accountId', val)}
                 >
-                  <SelectTrigger className="border-neon-blue/20">
+                  <SelectTrigger className="border-neon-cyan/20">
                     <SelectValue placeholder="Seleccionar" />
                   </SelectTrigger>
                   <SelectContent>
@@ -780,7 +816,7 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
               <Input
                 type="date"
                 {...txForm.register('date')}
-                className="border-neon-blue/20 focus-visible:border-neon-blue/50"
+                className="border-neon-cyan/20 focus-visible:border-neon-cyan/50"
               />
               {txForm.formState.errors.date && (
                 <p className="text-xs text-destructive">
@@ -795,7 +831,7 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
               <Textarea
                 placeholder="Notas adicionales..."
                 {...txForm.register('notes')}
-                className="border-neon-blue/20 focus-visible:border-neon-blue/50 min-h-[60px]"
+                className="border-neon-cyan/20 focus-visible:border-neon-cyan/50 min-h-[60px]"
               />
             </div>
 
@@ -805,7 +841,7 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
               <Input
                 placeholder="Separadas por coma: comida, outside"
                 {...txForm.register('tags')}
-                className="border-neon-blue/20 focus-visible:border-neon-blue/50"
+                className="border-neon-cyan/20 focus-visible:border-neon-cyan/50"
               />
             </div>
 
@@ -823,14 +859,14 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
                 type="button"
                 variant="outline"
                 onClick={() => setTxDialogOpen(false)}
-                className="border-neon-blue/20"
+                className="border-neon-cyan/20"
               >
                 Cancelar
               </Button>
               <Button
                 type="submit"
                 disabled={submitting}
-                className="bg-neon-blue text-black hover:bg-neon-blue/80 shadow-neon-blue"
+                className="bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/30"
               >
                 {submitting && <Loader2 className="size-4 animate-spin" />}
                 {editingTx ? 'Actualizar' : 'Crear'}
@@ -842,9 +878,9 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
 
       {/* ── Transfer Dialog ── */}
       <Dialog open={transferDialogOpen} onOpenChange={setTransferDialogOpen}>
-        <DialogContent className="sm:max-w-md border-neon-blue/20 bg-card">
+        <DialogContent className="sm:max-w-md border-neon-cyan/20 bg-card">
           <DialogHeader>
-            <DialogTitle className="text-neon-blue">Nueva Transferencia</DialogTitle>
+            <DialogTitle className="text-neon-cyan">Nueva Transferencia</DialogTitle>
             <DialogDescription>Transfiere fondos entre cuentas</DialogDescription>
           </DialogHeader>
 
@@ -856,7 +892,7 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
                 value={transferForm.watch('fromAccountId') || ''}
                 onValueChange={(val) => transferForm.setValue('fromAccountId', val)}
               >
-                <SelectTrigger className="border-neon-blue/20">
+                <SelectTrigger className="border-neon-cyan/20">
                   <SelectValue placeholder="Seleccionar" />
                 </SelectTrigger>
                 <SelectContent>
@@ -881,7 +917,7 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
                 value={transferForm.watch('toAccountId') || ''}
                 onValueChange={(val) => transferForm.setValue('toAccountId', val)}
               >
-                <SelectTrigger className="border-neon-blue/20">
+                <SelectTrigger className="border-neon-cyan/20">
                   <SelectValue placeholder="Seleccionar" />
                 </SelectTrigger>
                 <SelectContent>
@@ -910,7 +946,7 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
                 min="1"
                 placeholder="0"
                 {...transferForm.register('amount')}
-                className="border-neon-blue/20 focus-visible:border-neon-blue/50"
+                className="border-neon-cyan/20 focus-visible:border-neon-cyan/50"
               />
               {transferForm.formState.errors.amount && (
                 <p className="text-xs text-destructive">
@@ -925,7 +961,7 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
               <Input
                 placeholder="Descripción de la transferencia"
                 {...transferForm.register('description')}
-                className="border-neon-blue/20 focus-visible:border-neon-blue/50"
+                className="border-neon-cyan/20 focus-visible:border-neon-cyan/50"
               />
             </div>
 
@@ -934,14 +970,14 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
                 type="button"
                 variant="outline"
                 onClick={() => setTransferDialogOpen(false)}
-                className="border-neon-blue/20"
+                className="border-neon-cyan/20"
               >
                 Cancelar
               </Button>
               <Button
                 type="submit"
                 disabled={submitting}
-                className="bg-neon-blue text-black hover:bg-neon-blue/80 shadow-neon-blue"
+                className="bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/30 hover:bg-neon-cyan/30"
               >
                 {submitting && <Loader2 className="size-4 animate-spin" />}
                 Transferir
@@ -1072,7 +1108,7 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
               <Button
                 type="submit"
                 disabled={submitting}
-                className="bg-neon-purple text-white hover:bg-neon-purple/80 shadow-neon-blue"
+                className="bg-neon-purple text-white hover:bg-neon-purple/80"
               >
                 {submitting && <Loader2 className="size-4 animate-spin" />}
                 Dividir
@@ -1088,15 +1124,15 @@ export function TransactionsPage({ currentMonth, currentYear }: TransactionsPage
           <AlertDialogHeader>
             <AlertDialogTitle className="text-neon-pink">Eliminar Transacción</AlertDialogTitle>
             <AlertDialogDescription>
-              ¿Estás seguro de que deseas eliminar esta transacción? Esta acción no se puede
-              deshacer y el saldo de la cuenta se ajustará automáticamente.
+              ¿Estás seguro de que deseas eliminar esta transacción? Esta acción no se puede deshacer
+              y afectará el balance de la cuenta asociada.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-neon-blue/20">Cancelar</AlertDialogCancel>
+            <AlertDialogCancel className="border-neon-cyan/20">Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={onDelete}
-              className="bg-destructive text-white hover:bg-destructive/90"
+              className="bg-neon-pink/20 text-neon-pink border border-neon-pink/30 hover:bg-neon-pink/30"
             >
               Eliminar
             </AlertDialogAction>

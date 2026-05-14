@@ -13,7 +13,14 @@ import type { ExpenseCategory } from '@/lib/db-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent } from '@/components/ui/card'
-import { Progress } from '@/components/ui/progress'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import {
   Dialog,
   DialogContent,
@@ -58,20 +65,35 @@ const budgetSchema = z.object({
 
 type BudgetForm = z.infer<typeof budgetSchema>
 
-// ─── Progress Color Helper ─────────────────────────────────────────
+// ─── Percentage Badge ──────────────────────────────────────────────
 
-function getProgressColor(percentage: number): string {
-  if (percentage <= 50) return '#01ff89' // neon-green
-  if (percentage <= 75) return '#05d9e8' // neon-blue
-  if (percentage <= 100) return '#f9f002' // neon-yellow
-  return '#ff2a6d' // neon-pink
-}
+function PercentageBadge({ percentage }: { percentage: number }) {
+  let bgColor: string
+  let borderColor: string
+  let textColor: string
 
-function getProgressLabel(percentage: number): string {
-  if (percentage <= 50) return 'text-neon-green'
-  if (percentage <= 75) return 'text-neon-blue'
-  if (percentage <= 100) return 'text-neon-yellow'
-  return 'text-neon-pink'
+  if (percentage < 75) {
+    bgColor = '#01ff8920'
+    borderColor = '#01ff8944'
+    textColor = '#01ff89'
+  } else if (percentage <= 100) {
+    bgColor = '#f9f00220'
+    borderColor = '#f9f00244'
+    textColor = '#f9f002'
+  } else {
+    bgColor = '#ff2a6d20'
+    borderColor = '#ff2a6d44'
+    textColor = '#ff2a6d'
+  }
+
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold"
+      style={{ backgroundColor: bgColor, border: `1px solid ${borderColor}`, color: textColor }}
+    >
+      {percentage}%
+    </span>
+  )
 }
 
 // ─── Budget Dialog ─────────────────────────────────────────────────
@@ -290,173 +312,6 @@ function DeleteBudgetDialog({
   )
 }
 
-// ─── Budget Card ───────────────────────────────────────────────────
-
-function BudgetCard({
-  budget,
-  onEdit,
-  onDelete,
-}: {
-  budget: BudgetWithSpent
-  onEdit: (b: BudgetWithSpent) => void
-  onDelete: (b: BudgetWithSpent) => void
-}) {
-  const percentage = budget.amount > 0 ? Math.round((budget.spent / budget.amount) * 100) : 0
-  const remaining = budget.amount - budget.spent
-  const isOverBudget = remaining < 0
-  const progressColor = getProgressColor(percentage)
-  const progressLabelClass = getProgressLabel(percentage)
-
-  return (
-    <Card className="group border-border/50 bg-card/80 backdrop-blur-sm hover:border-neon-blue/30 hover:shadow-neon-blue transition-all duration-300">
-      <CardContent className="p-4 space-y-3">
-        {/* Header row */}
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3 min-w-0 flex-1">
-            <span className="text-2xl shrink-0">{budget.categoryIcon || '💰'}</span>
-            <div className="min-w-0 flex-1">
-              <h3 className="font-medium text-foreground truncate">
-                {budget.categoryName || 'Sin categoría'}
-              </h3>
-              <div className="flex items-center gap-2 mt-0.5">
-                {budget.categoryColor && (
-                  <div
-                    className="size-2.5 rounded-full shrink-0"
-                    style={{ backgroundColor: budget.categoryColor }}
-                  />
-                )}
-                <span className="text-xs text-muted-foreground">
-                  Presupuesto: {formatCurrency(budget.amount)}
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 text-muted-foreground hover:text-neon-blue"
-              onClick={() => onEdit(budget)}
-            >
-              <Pencil className="size-3.5" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="size-8 text-muted-foreground hover:text-neon-pink"
-              onClick={() => onDelete(budget)}
-            >
-              <Trash2 className="size-3.5" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Progress bar */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">
-              Gastado: <span className="text-foreground font-medium">{formatCurrency(budget.spent)}</span>
-            </span>
-            <span className={`font-mono font-bold ${progressLabelClass}`}>
-              {percentage}%
-            </span>
-          </div>
-          <div className="relative h-2 w-full overflow-hidden rounded-full bg-primary/20">
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{
-                width: `${Math.min(percentage, 100)}%`,
-                backgroundColor: progressColor,
-                boxShadow: `0 0 8px ${progressColor}40`,
-              }}
-            />
-          </div>
-        </div>
-
-        {/* Remaining */}
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Restante:</span>
-          <span
-            className={`text-sm font-semibold ${
-              isOverBudget ? 'text-neon-pink' : 'text-neon-green'
-            }`}
-          >
-            {isOverBudget ? '-' : ''}
-            {formatCurrency(Math.abs(remaining))}
-          </span>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
-// ─── Summary Card ──────────────────────────────────────────────────
-
-function SummaryCard({ budgets }: { budgets: BudgetWithSpent[] }) {
-  const totalBudget = budgets.reduce((sum, b) => sum + b.amount, 0)
-  const totalSpent = budgets.reduce((sum, b) => sum + b.spent, 0)
-  const totalRemaining = totalBudget - totalSpent
-  const overallPercentage = totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0
-  const progressColor = getProgressColor(overallPercentage)
-  const progressLabelClass = getProgressLabel(overallPercentage)
-  const isOverBudget = totalRemaining < 0
-
-  return (
-    <Card className="border-neon-blue/20 bg-card/90 backdrop-blur-sm shadow-neon-blue">
-      <CardContent className="p-4 md:p-6">
-        <h3 className="text-sm font-medium text-muted-foreground mb-4">
-          Resumen del Período
-        </h3>
-        <div className="grid grid-cols-3 gap-4 mb-4">
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">Total presupuestado</p>
-            <p className="text-lg font-bold text-neon-blue">
-              {formatCurrency(totalBudget)}
-            </p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">Total gastado</p>
-            <p className="text-lg font-bold text-neon-pink">
-              {formatCurrency(totalSpent)}
-            </p>
-          </div>
-          <div className="space-y-1">
-            <p className="text-xs text-muted-foreground">Total restante</p>
-            <p
-              className={`text-lg font-bold ${
-                isOverBudget ? 'text-neon-pink' : 'text-neon-green'
-              }`}
-            >
-              {isOverBudget ? '-' : ''}
-              {formatCurrency(Math.abs(totalRemaining))}
-            </p>
-          </div>
-        </div>
-
-        {/* Overall progress */}
-        <div className="space-y-1.5">
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-muted-foreground">Progreso general</span>
-            <span className={`font-mono font-bold ${progressLabelClass}`}>
-              {overallPercentage}%
-            </span>
-          </div>
-          <div className="relative h-3 w-full overflow-hidden rounded-full bg-primary/20">
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{
-                width: `${Math.min(overallPercentage, 100)}%`,
-                backgroundColor: progressColor,
-                boxShadow: `0 0 10px ${progressColor}50`,
-              }}
-            />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
 // ─── Main Budgets Page ─────────────────────────────────────────────
 
 export function BudgetsPage({
@@ -504,14 +359,20 @@ export function BudgetsPage({
 
   const budgetList = budgets ?? []
 
+  // ── Summary calculations ──
+  const totalBudget = budgetList.reduce((sum, b) => sum + b.amount, 0)
+  const totalSpent = budgetList.reduce((sum, b) => sum + b.spent, 0)
+  const totalRemaining = totalBudget - totalSpent
+  const isOverBudget = totalRemaining < 0
+
   return (
     <div className="page-enter p-4 md:p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <PieChart className="size-6 text-neon-blue" />
+          <PieChart className="size-6 text-neon-cyan" />
           <div>
-            <h1 className="text-2xl font-bold text-neon-blue">Presupuestos</h1>
+            <h1 className="text-2xl font-bold text-neon-cyan">Presupuestos</h1>
             <p className="text-sm text-muted-foreground">
               {formatMonthYear(month, year)}
             </p>
@@ -519,21 +380,22 @@ export function BudgetsPage({
         </div>
         <Button
           onClick={handleCreate}
-          className="bg-neon-blue/20 text-neon-blue border border-neon-blue/30 hover:bg-neon-blue/30"
+          className="bg-neon-yellow/20 text-neon-yellow border border-neon-yellow/30 hover:bg-neon-yellow/30"
+          style={{ boxShadow: '0 0 10px #f9f00220' }}
         >
           <Plus className="size-4" />
-          Nuevo Presupuesto
+          Agregar Presupuesto
         </Button>
       </div>
 
       {loading ? (
         <div className="space-y-6">
-          <Skeleton className="h-40 rounded-xl" />
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-48 rounded-xl" />
+              <Skeleton key={i} className="h-20 rounded-xl" />
             ))}
           </div>
+          <Skeleton className="h-64 rounded-xl" />
         </div>
       ) : budgetList.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
@@ -546,28 +408,160 @@ export function BudgetsPage({
           <Button
             onClick={handleCreate}
             variant="outline"
-            className="mt-4 border-neon-blue/30 text-neon-blue hover:bg-neon-blue/10"
+            className="mt-4 border-neon-cyan/30 text-neon-cyan hover:bg-neon-cyan/10"
           >
             <Plus className="size-4" />
             Crear Primer Presupuesto
           </Button>
         </div>
       ) : (
-        <div className="space-y-6">
-          {/* Summary Card */}
-          <SummaryCard budgets={budgetList} />
-
-          {/* Budget Cards Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {budgetList.map((budget) => (
-              <BudgetCard
-                key={budget.id}
-                budget={budget}
-                onEdit={handleEdit}
-                onDelete={handleDelete}
-              />
-            ))}
+        <div className="space-y-4">
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <Card
+              className="border-[#05d9e8]/30 bg-card/80"
+              style={{ boxShadow: '0 0 10px #05d9e820' }}
+            >
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Total Presupuestado</p>
+                <p className="text-2xl font-bold" style={{ color: '#05d9e8' }}>
+                  {formatCurrency(totalBudget)}
+                </p>
+              </CardContent>
+            </Card>
+            <Card
+              className="border-[#ff2a6d]/30 bg-card/80"
+              style={{ boxShadow: '0 0 10px #ff2a6d20' }}
+            >
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Total Gastado</p>
+                <p className="text-2xl font-bold" style={{ color: '#ff2a6d' }}>
+                  {formatCurrency(totalSpent)}
+                </p>
+              </CardContent>
+            </Card>
+            <Card
+              className="border-[#01ff89]/30 bg-card/80"
+              style={{ boxShadow: '0 0 10px #01ff8920' }}
+            >
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Total Restante</p>
+                <p
+                  className="text-2xl font-bold"
+                  style={{ color: isOverBudget ? '#ff2a6d' : '#01ff89' }}
+                >
+                  {isOverBudget ? '-' : ''}
+                  {formatCurrency(Math.abs(totalRemaining))}
+                </p>
+              </CardContent>
+            </Card>
           </div>
+
+          {/* Table */}
+          <Card
+            className="border-neon-cyan/20 bg-card/80 backdrop-blur-sm"
+            style={{ boxShadow: '0 0 15px #05d9e810' }}
+          >
+            <CardContent className="p-0">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-neon-cyan/10 hover:bg-transparent">
+                    <TableHead className="text-muted-foreground">Categoría</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Presupuestado</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Gastado</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Restante</TableHead>
+                    <TableHead className="text-muted-foreground text-center">Porcentaje</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {budgetList.map((budget) => {
+                    const percentage = budget.amount > 0 ? Math.round((budget.spent / budget.amount) * 100) : 0
+                    const remaining = budget.amount - budget.spent
+                    const isOver = remaining < 0
+
+                    return (
+                      <TableRow
+                        key={budget.id}
+                        className="border-neon-cyan/5 hover:bg-neon-cyan/5 transition-colors"
+                      >
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">{budget.categoryIcon || '💰'}</span>
+                            <span className="font-medium">{budget.categoryName || 'Sin categoría'}</span>
+                          </div>
+                        </TableCell>
+                        <TableCell className="text-right font-mono" style={{ color: '#05d9e8' }}>
+                          {formatCurrency(budget.amount)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono" style={{ color: '#ff2a6d' }}>
+                          {formatCurrency(budget.spent)}
+                        </TableCell>
+                        <TableCell
+                          className="text-right font-mono font-semibold"
+                          style={{ color: isOver ? '#ff2a6d' : '#01ff89' }}
+                        >
+                          {isOver ? '-' : ''}
+                          {formatCurrency(Math.abs(remaining))}
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <PercentageBadge percentage={percentage} />
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 text-muted-foreground hover:text-neon-blue"
+                              onClick={() => handleEdit(budget)}
+                              title="Editar"
+                            >
+                              <Pencil className="size-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 text-muted-foreground hover:text-neon-pink"
+                              onClick={() => handleDelete(budget)}
+                              title="Eliminar"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+
+                  {/* TOTAL row */}
+                  <TableRow className="border-neon-yellow/20 bg-neon-yellow/5 hover:bg-neon-yellow/10">
+                    <TableCell className="font-bold" style={{ color: '#f9f002' }}>
+                      TOTAL
+                    </TableCell>
+                    <TableCell className="text-right font-mono font-bold" style={{ color: '#05d9e8' }}>
+                      {formatCurrency(totalBudget)}
+                    </TableCell>
+                    <TableCell className="text-right font-mono font-bold" style={{ color: '#ff2a6d' }}>
+                      {formatCurrency(totalSpent)}
+                    </TableCell>
+                    <TableCell
+                      className="text-right font-mono font-bold"
+                      style={{ color: isOverBudget ? '#ff2a6d' : '#01ff89' }}
+                    >
+                      {isOverBudget ? '-' : ''}
+                      {formatCurrency(Math.abs(totalRemaining))}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <PercentageBadge
+                        percentage={totalBudget > 0 ? Math.round((totalSpent / totalBudget) * 100) : 0}
+                      />
+                    </TableCell>
+                    <TableCell />
+                  </TableRow>
+                </TableBody>
+              </Table>
+            </CardContent>
+          </Card>
         </div>
       )}
 

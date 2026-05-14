@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod/v4'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -15,17 +15,28 @@ import {
   ChevronUp,
   CalendarDays,
   Target,
+  Wallet,
+  TrendingUp,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { savingsService, categoryService, useAsyncData } from '@/lib/data'
+import { savingsService, useAsyncData } from '@/lib/data'
 import { formatCurrency, formatDate } from '@/lib/finance-utils'
-import type { SavingsGoal, SavingsMovement, ExpenseCategory } from '@/lib/db-client'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import type { SavingsGoal, SavingsMovement } from '@/lib/db-client'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Progress } from '@/components/ui/progress'
 import { Badge } from '@/components/ui/badge'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import {
   Dialog,
   DialogContent,
@@ -53,6 +64,20 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 
+// ─── CategoryBadge ─────────────────────────────────────────────────
+
+function CategoryBadge({ name, color }: { name: string; color?: string }) {
+  const c = color || '#05d9e8'
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+      style={{ backgroundColor: c + '22', border: `1px solid ${c}44`, color: c }}
+    >
+      {name}
+    </span>
+  )
+}
+
 // ─── Zod Schemas ────────────────────────────────────────────────────
 
 const savingsGoalSchema = z.object({
@@ -71,6 +96,11 @@ const movementSchema = z.object({
 
 type SavingsGoalForm = z.infer<typeof savingsGoalSchema>
 type MovementForm = z.infer<typeof movementSchema>
+
+// ─── Theme Colors ────────────────────────────────────────────────────
+
+const CYAN = '#00fff5'
+const CYAN_M = '#05d9e8'
 
 // ─── Component ──────────────────────────────────────────────────────
 
@@ -293,238 +323,288 @@ export function SavingsPage({ currentMonth, currentYear }: { currentMonth?: numb
     return Math.max(0, target - current)
   }
 
+  // ─── Computed summary ────────────────────────────────────────────
+
+  const totalSaved = goals?.reduce((sum, g) => sum + g.currentAmount, 0) ?? 0
+  const totalTarget = goals?.reduce((sum, g) => sum + g.targetAmount, 0) ?? 0
+  const overallProgress = totalTarget > 0 ? Math.min(100, Math.round((totalSaved / totalTarget) * 100)) : 0
+
   // ─── Render ──────────────────────────────────────────────────────
 
   if (loading) {
     return (
-      <div className="page-enter p-6">
-        <div className="flex items-center justify-between mb-6">
+      <div className="page-enter p-4 md:p-6 space-y-4">
+        <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-neon-cyan">Metas de Ahorro</h1>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
             <Card key={i} className="border-neon-cyan/20 animate-pulse">
-              <CardContent className="p-6">
-                <div className="h-4 bg-muted rounded w-1/2 mb-4" />
-                <div className="h-3 bg-muted rounded w-3/4 mb-2" />
-                <div className="h-2 bg-muted rounded w-full mb-4" />
-                <div className="h-8 bg-muted rounded w-1/3" />
+              <CardContent className="p-4">
+                <div className="h-4 bg-muted rounded w-1/2 mb-3" />
+                <div className="h-6 bg-muted rounded w-2/3" />
               </CardContent>
             </Card>
           ))}
         </div>
+        <Card className="border-neon-cyan/10 animate-pulse">
+          <CardContent className="p-6">
+            <div className="h-40 bg-muted rounded" />
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
   return (
-    <div className="page-enter p-6 cyber-scrollbar overflow-y-auto h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="page-enter p-4 md:p-6 space-y-4 overflow-auto">
+      {/* ── Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
-          <PiggyBank className="size-7 text-neon-cyan" />
-          <h1 className="text-2xl font-bold text-neon-cyan">Metas de Ahorro</h1>
+          <div className="flex items-center justify-center size-10 rounded-lg border border-neon-cyan/30 bg-neon-cyan/10">
+            <PiggyBank className="size-5 text-neon-cyan" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold" style={{ color: CYAN, textShadow: `0 0 20px ${CYAN}44` }}>
+              Metas de Ahorro
+            </h1>
+            <p className="text-sm text-muted-foreground">Gestiona tus metas de ahorro</p>
+          </div>
         </div>
         <Button
           onClick={openCreateGoal}
-          className="bg-neon-cyan/20 border border-neon-cyan/50 text-neon-cyan hover:bg-neon-cyan/30 hover:shadow-neon-blue transition-all"
+          className="bg-neon-cyan/20 border border-neon-cyan/50 text-neon-cyan hover:bg-neon-cyan/30 hover:shadow-[0_0_15px_rgba(5,217,232,0.3)] transition-all"
         >
-          <Plus className="size-4 mr-2" />
+          <Plus className="size-4" />
           Nueva Meta
         </Button>
       </div>
 
-      {/* Empty State */}
-      {!goals || goals.length === 0 ? (
-        <Card className="border-neon-cyan/20">
-          <CardContent className="p-12 text-center">
-            <PiggyBank className="size-16 text-neon-cyan/30 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-muted-foreground mb-2">
-              No hay metas de ahorro
-            </h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Crea tu primera meta de ahorro para empezar a guardar
-            </p>
+      {/* ── Summary Cards ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Total Ahorrado */}
+        <Card className="border-neon-cyan/20 bg-card/50 backdrop-blur-sm">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="flex items-center justify-center size-10 rounded-lg bg-neon-cyan/10 border border-neon-cyan/30">
+              <Wallet className="size-5 text-neon-cyan" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Total Ahorrado</p>
+              <p className="text-lg font-bold text-neon-cyan font-mono">{formatCurrency(totalSaved)}</p>
+            </div>
+          </CardContent>
+        </Card>
+        {/* Meta Total */}
+        <Card className="border-neon-green/20 bg-card/50 backdrop-blur-sm">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="flex items-center justify-center size-10 rounded-lg bg-neon-green/10 border border-neon-green/30">
+              <Target className="size-5 text-neon-green" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Meta Total</p>
+              <p className="text-lg font-bold text-neon-green font-mono">{formatCurrency(totalTarget)}</p>
+            </div>
+          </CardContent>
+        </Card>
+        {/* Progreso */}
+        <Card className="border-neon-yellow/20 bg-card/50 backdrop-blur-sm">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="flex items-center justify-center size-10 rounded-lg bg-neon-yellow/10 border border-neon-yellow/30">
+              <TrendingUp className="size-5 text-neon-yellow" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Progreso</p>
+              <p className="text-lg font-bold text-neon-yellow font-mono">{overallProgress}%</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Empty State ── */}
+      {(!goals || goals.length === 0) ? (
+        <Card className="border-neon-cyan/10 bg-card/50 backdrop-blur-sm">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+            <PiggyBank className="size-10 mb-3 text-neon-cyan/30" />
+            <p className="text-lg font-medium">No hay metas de ahorro</p>
+            <p className="text-sm mb-4">Crea tu primera meta de ahorro para empezar a guardar</p>
             <Button
               onClick={openCreateGoal}
               className="bg-neon-cyan/20 border border-neon-cyan/50 text-neon-cyan hover:bg-neon-cyan/30"
             >
-              <Plus className="size-4 mr-2" />
+              <Plus className="size-4" />
               Crear Meta
             </Button>
           </CardContent>
         </Card>
       ) : (
-        /* Goals Grid */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {goals.map((goal) => {
-            const progress = getProgress(goal.currentAmount, goal.targetAmount)
-            const remaining = getRemaining(goal.currentAmount, goal.targetAmount)
-            const isExpanded = expandedGoalId === goal.id
+        /* ── Table ── */
+        <Card className="border-neon-cyan/10 bg-card/50 backdrop-blur-sm">
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-neon-cyan/10 hover:bg-transparent">
+                  <TableHead className="text-neon-cyan/70">Nombre</TableHead>
+                  <TableHead className="text-neon-cyan/70 text-right">Meta</TableHead>
+                  <TableHead className="text-neon-cyan/70 text-right hidden sm:table-cell">Ahorrado</TableHead>
+                  <TableHead className="text-neon-cyan/70 text-right hidden md:table-cell">Restante</TableHead>
+                  <TableHead className="text-neon-cyan/70 hidden lg:table-cell">Progreso</TableHead>
+                  <TableHead className="text-neon-cyan/70 hidden lg:table-cell">Fecha Límite</TableHead>
+                  <TableHead className="text-neon-cyan/70 text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {goals.map((goal) => {
+                  const progress = getProgress(goal.currentAmount, goal.targetAmount)
+                  const remaining = getRemaining(goal.currentAmount, goal.targetAmount)
+                  const isOver = goal.currentAmount > goal.targetAmount
+                  const isExpanded = expandedGoalId === goal.id
 
-            return (
-              <Card
-                key={goal.id}
-                className="border-neon-cyan/20 hover:border-neon-cyan/40 hover:shadow-neon-blue transition-all"
-              >
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">{goal.icon}</span>
-                      <CardTitle className="text-base text-foreground">{goal.name}</CardTitle>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditGoal(goal)}
-                        className="size-8 p-0 text-muted-foreground hover:text-neon-cyan"
+                  return (
+                    <>
+                      <TableRow
+                        key={goal.id}
+                        className="border-neon-cyan/5 hover:bg-neon-cyan/5 transition-colors"
                       >
-                        <Pencil className="size-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => confirmDeleteGoal(goal)}
-                        className="size-8 p-0 text-muted-foreground hover:text-neon-pink"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {/* Progress info */}
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-neon-cyan font-medium">
-                      {formatCurrency(goal.currentAmount)}
-                    </span>
-                    <span className="text-muted-foreground">
-                      de {formatCurrency(goal.targetAmount)}
-                    </span>
-                  </div>
+                        {/* Nombre */}
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <span className="text-lg">{goal.icon}</span>
+                            <span className="font-medium truncate max-w-[150px]">{goal.name}</span>
+                          </div>
+                        </TableCell>
+                        {/* Meta */}
+                        <TableCell className="text-right font-mono text-neon-cyan">
+                          {formatCurrency(goal.targetAmount)}
+                        </TableCell>
+                        {/* Ahorrado */}
+                        <TableCell className="text-right font-mono text-neon-green hidden sm:table-cell">
+                          {formatCurrency(goal.currentAmount)}
+                        </TableCell>
+                        {/* Restante */}
+                        <TableCell className="text-right font-mono hidden md:table-cell" style={{ color: isOver ? '#ff2a6d' : '#f9f002' }}>
+                          {isOver ? '+' + formatCurrency(goal.currentAmount - goal.targetAmount) : formatCurrency(remaining)}
+                        </TableCell>
+                        {/* Progreso */}
+                        <TableCell className="hidden lg:table-cell">
+                          <div className="flex items-center gap-2 min-w-[120px]">
+                            <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+                              <div
+                                className="h-full rounded-full transition-all"
+                                style={{
+                                  width: `${progress}%`,
+                                  backgroundColor: goal.color,
+                                  boxShadow: `0 0 6px ${goal.color}66`,
+                                }}
+                              />
+                            </div>
+                            <span className="text-xs font-mono font-medium w-8 text-right" style={{ color: goal.color }}>
+                              {progress}%
+                            </span>
+                          </div>
+                        </TableCell>
+                        {/* Fecha Límite */}
+                        <TableCell className="hidden lg:table-cell text-xs text-muted-foreground">
+                          {goal.deadline ? formatDate(goal.deadline) : '—'}
+                        </TableCell>
+                        {/* Acciones */}
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 text-neon-green hover:text-neon-green hover:bg-neon-green/10"
+                              onClick={() => openDepositDialog(goal)}
+                              title="Depositar"
+                            >
+                              <ArrowDownToLine className="size-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 text-neon-yellow hover:text-neon-yellow hover:bg-neon-yellow/10"
+                              onClick={() => openWithdrawDialog(goal)}
+                              title="Retirar"
+                            >
+                              <ArrowUpFromLine className="size-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 text-muted-foreground hover:text-neon-blue hover:bg-neon-blue/10"
+                              onClick={() => openEditGoal(goal)}
+                              title="Editar"
+                            >
+                              <Pencil className="size-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 text-muted-foreground hover:text-neon-pink hover:bg-neon-pink/10"
+                              onClick={() => confirmDeleteGoal(goal)}
+                              title="Eliminar"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 text-muted-foreground hover:text-neon-cyan hover:bg-neon-cyan/10"
+                              onClick={() => toggleMovements(goal.id)}
+                              title="Historial"
+                            >
+                              {isExpanded ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
 
-                  {/* Progress bar */}
-                  <div className="relative">
-                    <Progress
-                      value={progress}
-                      className="h-3 bg-muted"
-                    />
-                    <div
-                      className="absolute top-0 left-0 h-3 rounded-full transition-all"
-                      style={{
-                        width: `${progress}%`,
-                        background: `linear-gradient(90deg, ${goal.color}, ${goal.color}cc)`,
-                        boxShadow: `0 0 8px ${goal.color}66`,
-                      }}
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between text-xs">
-                    <Badge
-                      variant="outline"
-                      className="border-neon-cyan/40 text-neon-cyan"
-                    >
-                      {progress}%
-                    </Badge>
-                    <span className="text-muted-foreground">
-                      Falta: {formatCurrency(remaining)}
-                    </span>
-                  </div>
-
-                  {/* Deadline */}
-                  {goal.deadline && (
-                    <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                      <CalendarDays className="size-3" />
-                      <span>Fecha límite: {formatDate(goal.deadline)}</span>
-                    </div>
-                  )}
-
-                  {/* Action buttons */}
-                  <div className="flex items-center gap-2 pt-1">
-                    <Button
-                      size="sm"
-                      onClick={() => openDepositDialog(goal)}
-                      className="flex-1 bg-neon-cyan/15 border border-neon-cyan/40 text-neon-cyan hover:bg-neon-cyan/25 text-xs"
-                    >
-                      <ArrowDownToLine className="size-3 mr-1" />
-                      Depositar
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => openWithdrawDialog(goal)}
-                      className="flex-1 bg-neon-purple/15 border border-neon-purple/40 text-neon-purple hover:bg-neon-purple/25 text-xs"
-                    >
-                      <ArrowUpFromLine className="size-3 mr-1" />
-                      Retirar
-                    </Button>
-                  </div>
-
-                  {/* Movement history toggle */}
-                  <button
-                    onClick={() => toggleMovements(goal.id)}
-                    className="flex items-center gap-1 text-xs text-muted-foreground hover:text-neon-cyan transition-colors w-full pt-1"
-                  >
-                    {isExpanded ? <ChevronUp className="size-3" /> : <ChevronDown className="size-3" />}
-                    <span>Historial de movimientos</span>
-                  </button>
-
-                  {/* Movement history */}
-                  {isExpanded && (
-                    <div className="max-h-48 overflow-y-auto cyber-scrollbar space-y-1.5 pt-1">
-                      {loadingMovements ? (
-                        <p className="text-xs text-muted-foreground text-center py-2">Cargando...</p>
-                      ) : movements.length === 0 ? (
-                        <p className="text-xs text-muted-foreground text-center py-2">
-                          Sin movimientos
-                        </p>
-                      ) : (
-                        movements.map((mov) => (
-                          <div
-                            key={mov.id}
-                            className="flex items-center justify-between text-xs py-1.5 px-2 rounded bg-muted/30"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={
-                                  mov.type === 'deposit'
-                                    ? 'text-neon-cyan'
-                                    : 'text-neon-pink'
-                                }
-                              >
-                                {mov.type === 'deposit' ? '↓ Depósito' : '↑ Retiro'}
-                              </span>
-                              {mov.description && (
-                                <span className="text-muted-foreground truncate max-w-[80px]">
-                                  {mov.description}
-                                </span>
+                      {/* Expanded Movement History */}
+                      {isExpanded && (
+                        <TableRow key={`${goal.id}-movements`} className="border-neon-cyan/5">
+                          <TableCell colSpan={7} className="bg-muted/20 p-0">
+                            <div className="max-h-48 overflow-y-auto cyber-scrollbar p-3 space-y-1.5">
+                              {loadingMovements ? (
+                                <p className="text-xs text-muted-foreground text-center py-2">Cargando...</p>
+                              ) : movements.length === 0 ? (
+                                <p className="text-xs text-muted-foreground text-center py-2">Sin movimientos</p>
+                              ) : (
+                                movements.map((mov) => (
+                                  <div
+                                    key={mov.id}
+                                    className="flex items-center justify-between text-xs py-1.5 px-2 rounded bg-muted/30"
+                                  >
+                                    <div className="flex items-center gap-2">
+                                      <span className={mov.type === 'deposit' ? 'text-neon-cyan' : 'text-neon-pink'}>
+                                        {mov.type === 'deposit' ? '↓ Depósito' : '↑ Retiro'}
+                                      </span>
+                                      {mov.description && (
+                                        <span className="text-muted-foreground truncate max-w-[120px]">
+                                          {mov.description}
+                                        </span>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <span className={mov.type === 'deposit' ? 'text-neon-cyan font-medium' : 'text-neon-pink font-medium'}>
+                                        {mov.type === 'deposit' ? '+' : '-'}{formatCurrency(mov.amount)}
+                                      </span>
+                                      <span className="text-muted-foreground">
+                                        {formatDate(mov.createdAt)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))
                               )}
                             </div>
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={
-                                  mov.type === 'deposit'
-                                    ? 'text-neon-cyan font-medium'
-                                    : 'text-neon-pink font-medium'
-                                }
-                              >
-                                {mov.type === 'deposit' ? '+' : '-'}
-                                {formatCurrency(mov.amount)}
-                              </span>
-                              <span className="text-muted-foreground">
-                                {formatDate(mov.createdAt)}
-                              </span>
-                            </div>
-                          </div>
-                        ))
+                          </TableCell>
+                        </TableRow>
                       )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
+                    </>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
 
       {/* ─── Create/Edit Goal Dialog ──────────────────────────────── */}
@@ -752,9 +832,9 @@ export function SavingsPage({ currentMonth, currentYear }: { currentMonth?: numb
 
       {/* ─── Withdraw Dialog ──────────────────────────────────────── */}
       <Dialog open={withdrawDialogOpen} onOpenChange={setWithdrawDialogOpen}>
-        <DialogContent className="bg-card border-neon-purple/20">
+        <DialogContent className="bg-card border-neon-yellow/20">
           <DialogHeader>
-            <DialogTitle className="text-neon-purple">Retirar de {selectedGoal?.name}</DialogTitle>
+            <DialogTitle className="text-neon-yellow">Retirar de {selectedGoal?.name}</DialogTitle>
             <DialogDescription>
               Disponible: {selectedGoal ? formatCurrency(selectedGoal.currentAmount) : '$0'}
             </DialogDescription>
@@ -775,7 +855,7 @@ export function SavingsPage({ currentMonth, currentYear }: { currentMonth?: numb
                         max={selectedGoal?.currentAmount}
                         {...field}
                         onChange={(e) => field.onChange(Number(e.target.value) || 0)}
-                        className="border-neon-purple/20 focus:border-neon-purple/50"
+                        className="border-neon-yellow/20 focus:border-neon-yellow/50"
                       />
                     </FormControl>
                     <FormMessage />
@@ -793,7 +873,7 @@ export function SavingsPage({ currentMonth, currentYear }: { currentMonth?: numb
                       <Input
                         placeholder="Ej: Emergencia"
                         {...field}
-                        className="border-neon-purple/20 focus:border-neon-purple/50"
+                        className="border-neon-yellow/20 focus:border-neon-yellow/50"
                       />
                     </FormControl>
                     <FormMessage />
@@ -812,7 +892,7 @@ export function SavingsPage({ currentMonth, currentYear }: { currentMonth?: numb
                 <Button
                   type="submit"
                   disabled={submittingMovement}
-                  className="bg-neon-purple/20 border border-neon-purple/50 text-neon-purple hover:bg-neon-purple/30"
+                  className="bg-neon-yellow/20 border border-neon-yellow/50 text-neon-yellow hover:bg-neon-yellow/30"
                 >
                   <ArrowUpFromLine className="size-4 mr-2" />
                   {submittingMovement ? 'Retirando...' : 'Retirar'}

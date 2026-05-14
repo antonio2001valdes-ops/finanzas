@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -18,8 +18,15 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Badge } from '@/components/ui/badge'
 import { Label } from '@/components/ui/label'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import {
   Dialog,
   DialogContent,
@@ -74,11 +81,23 @@ const transferSchema = z.object({
 
 type TransferFormValues = z.infer<typeof transferSchema>
 
-// ─── Neon glow helper ─────────────────────────────────────────────
+// ─── Account Type Badge ────────────────────────────────────────────
 
-function neonBorderForColor(color: string): string {
-  const c = color || '#05d9e8'
-  return `border-color: ${c}; box-shadow: 0 0 8px ${c}33, 0 0 16px ${c}11;`
+function AccountTypeBadge({ type }: { type: string }) {
+  const isCredit = type === 'credit'
+  const bgColor = isCredit ? '#8b5cf620' : '#05d9e820'
+  const borderColor = isCredit ? '#8b5cf644' : '#05d9e844'
+  const textColor = isCredit ? '#8b5cf6' : '#05d9e8'
+  const label = (ACCOUNT_TYPES as Record<string, string>)[type] || type
+
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold"
+      style={{ backgroundColor: bgColor, border: `1px solid ${borderColor}`, color: textColor }}
+    >
+      {label}
+    </span>
+  )
 }
 
 // ─── Component ────────────────────────────────────────────────────
@@ -222,48 +241,75 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
   }
 
   // ── Total Balance ──
-  const totalBalance = accounts?.reduce((sum, a) => sum + a.balance, 0) ?? 0
+  const accountList = accounts ?? []
+  const totalBalance = accountList.reduce((sum, a) => sum + a.balance, 0)
 
   return (
     <div className="page-enter p-4 md:p-6 space-y-4 overflow-auto">
       {/* ── Header ── */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-neon-blue">Cuentas</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Balance total: <span className="font-mono font-semibold text-neon-green">{formatCurrency(totalBalance)}</span>
-          </p>
+        <div className="flex items-center gap-3">
+          <Wallet className="size-7" style={{ color: '#05d9e8' }} />
+          <div>
+            <h1
+              className="text-2xl font-bold"
+              style={{ color: '#05d9e8', textShadow: '0 0 10px #05d9e866' }}
+            >
+              Cuentas
+            </h1>
+            <p className="text-sm text-muted-foreground mt-0.5">
+              {accountList.length} cuenta{accountList.length !== 1 ? 's' : ''}
+            </p>
+          </div>
         </div>
         <div className="flex gap-2 flex-wrap">
-          <Button
-            onClick={openCreate}
-            className="bg-neon-blue text-black hover:bg-neon-blue/80 shadow-neon-blue"
-          >
-            <Plus className="size-4" />
-            Nueva Cuenta
-          </Button>
           <Button
             variant="outline"
             onClick={() => {
               transferForm.reset()
               setTransferDialogOpen(true)
             }}
-            className="border-neon-blue/30 text-neon-blue hover:bg-neon-blue/10"
+            className="border-[#8b5cf6]/30 text-[#8b5cf6] hover:bg-[#8b5cf6]/10"
+            style={{ boxShadow: '0 0 8px #8b5cf620' }}
           >
             <ArrowRightLeft className="size-4" />
             Transferir
           </Button>
+          <Button
+            onClick={openCreate}
+            className="bg-[#05d9e8]/20 text-[#05d9e8] border border-[#05d9e8]/30 hover:bg-[#05d9e8]/30"
+            style={{ boxShadow: '0 0 10px #05d9e820' }}
+          >
+            <Plus className="size-4" />
+            Nueva Cuenta
+          </Button>
         </div>
       </div>
 
-      {/* ── Accounts Grid ── */}
+      {/* Summary Card */}
+      <Card
+        className="border-[#05d9e8]/30 bg-card/80"
+        style={{ boxShadow: '0 0 10px #05d9e820' }}
+      >
+        <CardContent className="p-4">
+          <p className="text-xs text-muted-foreground">Total Neto</p>
+          <p className="text-2xl font-bold" style={{ color: '#05d9e8' }}>
+            {formatCurrency(totalBalance)}
+          </p>
+        </CardContent>
+      </Card>
+
+      {/* ── Table ── */}
       {loading ? (
         <div className="flex items-center justify-center py-16">
-          <Loader2 className="size-8 animate-spin text-neon-blue" />
+          <Loader2 className="size-8 animate-spin" style={{ color: '#05d9e8' }} />
           <span className="ml-3 text-muted-foreground">Cargando cuentas...</span>
         </div>
-      ) : !accounts?.length ? (
-        <Card className="border-neon-blue/10 bg-card/50 backdrop-blur-sm">
+      ) : !accountList.length ? (
+        <Card
+          className="border-[#05d9e8]/10 bg-card/50 backdrop-blur-sm"
+          style={{ boxShadow: '0 0 10px #05d9e810' }}
+        >
           <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground">
             <AlertTriangle className="size-10 mb-3 text-neon-yellow" />
             <p className="text-lg font-medium">No hay cuentas</p>
@@ -271,90 +317,95 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {accounts.map((account) => (
-            <Card
-              key={account.id}
-              className="border-2 bg-card/80 backdrop-blur-sm hover:bg-card/90 transition-all group"
-              style={neonBorderForColor(account.color)}
-            >
-              <CardContent className="p-4 space-y-3">
-                {/* Top row: Icon + Name + Type badge */}
-                <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-2xl shrink-0">{account.icon || '💰'}</span>
-                    <div className="min-w-0">
-                      <h3 className="font-semibold truncate">{account.name}</h3>
-                      <Badge
-                        variant="outline"
-                        className="text-[10px] mt-0.5"
-                        style={{
-                          borderColor: `${account.color || '#05d9e8'}40`,
-                          color: account.color || '#05d9e8',
-                        }}
+        <Card
+          className="border-[#05d9e8]/20 bg-card/80 backdrop-blur-sm"
+          style={{ boxShadow: '0 0 15px #05d9e810' }}
+        >
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="border-[#05d9e8]/10 hover:bg-transparent">
+                    <TableHead className="text-muted-foreground w-10">Icono</TableHead>
+                    <TableHead className="text-muted-foreground">Nombre</TableHead>
+                    <TableHead className="text-muted-foreground">Tipo</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Balance</TableHead>
+                    <TableHead className="text-muted-foreground hidden sm:table-cell">Moneda</TableHead>
+                    <TableHead className="text-muted-foreground hidden md:table-cell">Notas</TableHead>
+                    <TableHead className="text-muted-foreground text-right">Acciones</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {accountList.map((account) => {
+                    const isCredit = account.type === 'credit'
+                    const balanceColor = isCredit
+                      ? (account.balance < 0 ? '#ff2a6d' : '#8b5cf6')
+                      : '#05d9e8'
+
+                    return (
+                      <TableRow
+                        key={account.id}
+                        className="border-[#05d9e8]/5 hover:bg-[#05d9e8]/5 transition-colors"
                       >
-                        {(ACCOUNT_TYPES as Record<string, string>)[account.type] || account.type}
-                      </Badge>
-                    </div>
-                  </div>
-                  <span
-                    className="w-3 h-3 rounded-full shrink-0 mt-1"
-                    style={{ backgroundColor: account.color || '#05d9e8' }}
-                  />
-                </div>
-
-                {/* Balance */}
-                <div>
-                  <p className="text-xs text-muted-foreground">Saldo</p>
-                  <p
-                    className="text-2xl font-mono font-bold"
-                    style={{ color: account.color || '#05d9e8' }}
-                  >
-                    {formatCurrency(account.balance)}
-                  </p>
-                  <p className="text-xs text-muted-foreground">{account.currency}</p>
-                </div>
-
-                {/* Notes */}
-                {account.notes && (
-                  <p className="text-xs text-muted-foreground line-clamp-2">{account.notes}</p>
-                )}
-
-                {/* Actions */}
-                <div className="flex items-center gap-2 pt-1 border-t border-white/5">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground hover:text-neon-blue h-7 px-2"
-                    onClick={() => openEdit(account)}
-                  >
-                    <Pencil className="size-3.5 mr-1" />
-                    Editar
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="text-muted-foreground hover:text-neon-pink h-7 px-2"
-                    onClick={() => {
-                      setDeletingAccountId(account.id)
-                      setDeleteDialogOpen(true)
-                    }}
-                  >
-                    <Trash2 className="size-3.5 mr-1" />
-                    Eliminar
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
+                        <TableCell>
+                          <span className="text-xl">{account.icon || '💰'}</span>
+                        </TableCell>
+                        <TableCell className="font-medium">{account.name}</TableCell>
+                        <TableCell>
+                          <AccountTypeBadge type={account.type} />
+                        </TableCell>
+                        <TableCell
+                          className="text-right font-mono font-bold"
+                          style={{ color: balanceColor }}
+                        >
+                          {formatCurrency(account.balance)}
+                        </TableCell>
+                        <TableCell className="hidden sm:table-cell text-muted-foreground text-xs">
+                          {account.currency}
+                        </TableCell>
+                        <TableCell className="hidden md:table-cell text-muted-foreground text-xs truncate max-w-[150px]">
+                          {account.notes || '—'}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 text-muted-foreground hover:text-neon-blue"
+                              onClick={() => openEdit(account)}
+                              title="Editar"
+                            >
+                              <Pencil className="size-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 text-muted-foreground hover:text-neon-pink"
+                              onClick={() => {
+                                setDeletingAccountId(account.id)
+                                setDeleteDialogOpen(true)
+                              }}
+                              title="Eliminar"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
       )}
 
       {/* ── Create/Edit Account Dialog ── */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="sm:max-w-lg border-neon-blue/20 bg-card">
+        <DialogContent className="sm:max-w-lg border-[#05d9e8]/20 bg-card">
           <DialogHeader>
-            <DialogTitle className="text-neon-blue">
+            <DialogTitle style={{ color: '#05d9e8' }}>
               {editingAccount ? 'Editar Cuenta' : 'Nueva Cuenta'}
             </DialogTitle>
             <DialogDescription>
@@ -372,7 +423,7 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
                 <Input
                   placeholder="Nombre de la cuenta"
                   {...form.register('name')}
-                  className="border-neon-blue/20 focus-visible:border-neon-blue/50"
+                  className="border-[#05d9e8]/20 focus-visible:border-[#05d9e8]/50"
                 />
                 {form.formState.errors.name && (
                   <p className="text-xs text-destructive">{form.formState.errors.name.message}</p>
@@ -386,7 +437,7 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
                   value={form.watch('type')}
                   onValueChange={(val) => form.setValue('type', val)}
                 >
-                  <SelectTrigger className="border-neon-blue/20">
+                  <SelectTrigger className="border-[#05d9e8]/20">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -408,7 +459,7 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
                   step="1"
                   placeholder="0"
                   {...form.register('balance')}
-                  className="border-neon-blue/20 focus-visible:border-neon-blue/50"
+                  className="border-[#05d9e8]/20 focus-visible:border-[#05d9e8]/50"
                 />
                 {form.formState.errors.balance && (
                   <p className="text-xs text-destructive">{form.formState.errors.balance.message}</p>
@@ -421,7 +472,7 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
                 <Input
                   placeholder="USD"
                   {...form.register('currency')}
-                  className="border-neon-blue/20 focus-visible:border-neon-blue/50"
+                  className="border-[#05d9e8]/20 focus-visible:border-[#05d9e8]/50"
                 />
                 {form.formState.errors.currency && (
                   <p className="text-xs text-destructive">{form.formState.errors.currency.message}</p>
@@ -436,7 +487,7 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
                 <Input
                   placeholder="💰"
                   {...form.register('icon')}
-                  className="border-neon-blue/20 focus-visible:border-neon-blue/50"
+                  className="border-[#05d9e8]/20 focus-visible:border-[#05d9e8]/50"
                 />
               </div>
 
@@ -447,7 +498,7 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
                   <Input
                     placeholder="#05d9e8"
                     {...form.register('color')}
-                    className="border-neon-blue/20 focus-visible:border-neon-blue/50 flex-1"
+                    className="border-[#05d9e8]/20 focus-visible:border-[#05d9e8]/50 flex-1"
                   />
                   <div
                     className="w-9 h-9 rounded-md border border-white/10 shrink-0"
@@ -484,7 +535,7 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
               <Textarea
                 placeholder="Notas adicionales..."
                 {...form.register('notes')}
-                className="border-neon-blue/20 focus-visible:border-neon-blue/50 min-h-[60px]"
+                className="border-[#05d9e8]/20 focus-visible:border-[#05d9e8]/50 min-h-[60px]"
               />
             </div>
 
@@ -493,14 +544,14 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
                 type="button"
                 variant="outline"
                 onClick={() => setDialogOpen(false)}
-                className="border-neon-blue/20"
+                className="border-[#05d9e8]/20"
               >
                 Cancelar
               </Button>
               <Button
                 type="submit"
                 disabled={submitting}
-                className="bg-neon-blue text-black hover:bg-neon-blue/80 shadow-neon-blue"
+                className="bg-[#05d9e8]/20 text-[#05d9e8] border border-[#05d9e8]/30 hover:bg-[#05d9e8]/30"
               >
                 {submitting && <Loader2 className="size-4 animate-spin" />}
                 {editingAccount ? 'Actualizar' : 'Crear'}
@@ -512,9 +563,9 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
 
       {/* ── Transfer Between Accounts Dialog ── */}
       <Dialog open={transferDialogOpen} onOpenChange={setTransferDialogOpen}>
-        <DialogContent className="sm:max-w-md border-neon-blue/20 bg-card">
+        <DialogContent className="sm:max-w-md border-[#8b5cf6]/20 bg-card">
           <DialogHeader>
-            <DialogTitle className="text-neon-blue">Transferir entre Cuentas</DialogTitle>
+            <DialogTitle style={{ color: '#8b5cf6' }}>Transferir entre Cuentas</DialogTitle>
             <DialogDescription>Transfiere fondos de una cuenta a otra</DialogDescription>
           </DialogHeader>
 
@@ -526,11 +577,11 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
                 value={transferForm.watch('fromAccountId') || ''}
                 onValueChange={(val) => transferForm.setValue('fromAccountId', val)}
               >
-                <SelectTrigger className="border-neon-blue/20">
+                <SelectTrigger className="border-[#8b5cf6]/20">
                   <SelectValue placeholder="Seleccionar" />
                 </SelectTrigger>
                 <SelectContent>
-                  {accounts?.map((a) => (
+                  {accountList.map((a) => (
                     <SelectItem key={a.id} value={a.id}>
                       {a.icon} {a.name} ({formatCurrency(a.balance)})
                     </SelectItem>
@@ -551,12 +602,12 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
                 value={transferForm.watch('toAccountId') || ''}
                 onValueChange={(val) => transferForm.setValue('toAccountId', val)}
               >
-                <SelectTrigger className="border-neon-blue/20">
+                <SelectTrigger className="border-[#8b5cf6]/20">
                   <SelectValue placeholder="Seleccionar" />
                 </SelectTrigger>
                 <SelectContent>
-                  {accounts
-                    ?.filter((a) => a.id !== transferForm.watch('fromAccountId'))
+                  {accountList
+                    .filter((a) => a.id !== transferForm.watch('fromAccountId'))
                     .map((a) => (
                       <SelectItem key={a.id} value={a.id}>
                         {a.icon} {a.name} ({formatCurrency(a.balance)})
@@ -580,7 +631,7 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
                 min="1"
                 placeholder="0"
                 {...transferForm.register('amount')}
-                className="border-neon-blue/20 focus-visible:border-neon-blue/50"
+                className="border-[#8b5cf6]/20 focus-visible:border-[#8b5cf6]/50"
               />
               {transferForm.formState.errors.amount && (
                 <p className="text-xs text-destructive">
@@ -595,7 +646,7 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
               <Input
                 placeholder="Descripción de la transferencia"
                 {...transferForm.register('description')}
-                className="border-neon-blue/20 focus-visible:border-neon-blue/50"
+                className="border-[#8b5cf6]/20 focus-visible:border-[#8b5cf6]/50"
               />
             </div>
 
@@ -604,14 +655,14 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
                 type="button"
                 variant="outline"
                 onClick={() => setTransferDialogOpen(false)}
-                className="border-neon-blue/20"
+                className="border-[#8b5cf6]/20"
               >
                 Cancelar
               </Button>
               <Button
                 type="submit"
                 disabled={submitting}
-                className="bg-neon-blue text-black hover:bg-neon-blue/80 shadow-neon-blue"
+                className="bg-[#8b5cf6]/20 text-[#8b5cf6] border border-[#8b5cf6]/30 hover:bg-[#8b5cf6]/30"
               >
                 {submitting && <Loader2 className="size-4 animate-spin" />}
                 Transferir
@@ -633,7 +684,7 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-neon-blue/20">Cancelar</AlertDialogCancel>
+            <AlertDialogCancel className="border-[#05d9e8]/20">Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={onDelete}
               className="bg-destructive text-white hover:bg-destructive/90"

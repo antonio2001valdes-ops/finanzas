@@ -10,22 +10,24 @@ import {
   Pencil,
   Trash2,
   Banknote,
-  ChevronDown,
-  ChevronUp,
-  CalendarDays,
-  Percent,
-  TrendingDown,
+  Loader2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { debtService, useAsyncData } from '@/lib/data'
 import { formatCurrency, formatDate, DEBT_STATUS } from '@/lib/finance-utils'
 import type { Debt, DebtPayment } from '@/lib/db-client'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Progress } from '@/components/ui/progress'
-import { Badge } from '@/components/ui/badge'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import {
   Dialog,
   DialogContent,
@@ -81,6 +83,25 @@ const paymentSchema = z.object({
 type DebtForm = z.infer<typeof debtSchema>
 type PaymentForm = z.infer<typeof paymentSchema>
 
+// ─── Status Badge ───────────────────────────────────────────────────
+
+function DebtStatusBadge({ status }: { status: string }) {
+  const isActive = status === 'active'
+  const bgColor = isActive ? '#ff6b3520' : '#01ff8920'
+  const borderColor = isActive ? '#ff6b3544' : '#01ff8944'
+  const textColor = isActive ? '#ff6b35' : '#01ff89'
+  const label = DEBT_STATUS[status] || status
+
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold"
+      style={{ backgroundColor: bgColor, border: `1px solid ${borderColor}`, color: textColor }}
+    >
+      {label}
+    </span>
+  )
+}
+
 // ─── Component ──────────────────────────────────────────────────────
 
 export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number; currentYear?: number }) {
@@ -94,11 +115,6 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
   const [selectedDebt, setSelectedDebt] = useState<Debt | null>(null)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [debtToDelete, setDebtToDelete] = useState<Debt | null>(null)
-
-  // Payment history expansion
-  const [expandedDebtId, setExpandedDebtId] = useState<string | null>(null)
-  const [payments, setPayments] = useState<DebtPayment[]>([])
-  const [loadingPayments, setLoadingPayments] = useState(false)
 
   // Submitting states
   const [submittingDebt, setSubmittingDebt] = useState(false)
@@ -215,9 +231,6 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
       toast.success(`Pago de ${formatCurrency(data.amount)} registrado`)
       setPaymentDialogOpen(false)
       refetch()
-      if (expandedDebtId === selectedDebt.id) {
-        loadPayments(selectedDebt.id)
-      }
     } catch {
       toast.error('Error al registrar el pago')
     } finally {
@@ -247,41 +260,16 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
     }
   }
 
-  // ─── Payment History ────────────────────────────────────────────
+  // ─── Summary ─────────────────────────────────────────────────────
 
-  const loadPayments = useCallback(async (debtId: string) => {
-    setLoadingPayments(true)
-    try {
-      const { db } = await import('@/lib/db-client')
-      const pmts = await db.debtPayments
-        .where('debtId')
-        .equals(debtId)
-        .reverse()
-        .sortBy('createdAt')
-      setPayments(pmts)
-    } catch {
-      setPayments([])
-    } finally {
-      setLoadingPayments(false)
-    }
-  }, [])
-
-  const togglePayments = (debtId: string) => {
-    if (expandedDebtId === debtId) {
-      setExpandedDebtId(null)
-    } else {
-      setExpandedDebtId(debtId)
-      loadPayments(debtId)
-    }
-  }
-
-  // ─── Helpers ─────────────────────────────────────────────────────
-
-  const getPaidAmount = (debt: Debt) => debt.totalAmount - debt.remainingAmount
-  const getPaidPercentage = (debt: Debt) => {
-    if (debt.totalAmount <= 0) return 0
-    return Math.min(100, Math.round((getPaidAmount(debt) / debt.totalAmount) * 100))
-  }
+  const debtList = debts ?? []
+  const totalDebt = debtList
+    .filter((d) => d.status === 'active')
+    .reduce((sum, d) => sum + d.remainingAmount, 0)
+  const totalPaid = debtList.reduce(
+    (sum, d) => sum + (d.totalAmount - d.remainingAmount),
+    0
+  )
 
   // ─── Render ──────────────────────────────────────────────────────
 
@@ -289,35 +277,47 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
     return (
       <div className="page-enter p-6">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-2xl font-bold text-neon-purple">Deudas</h1>
+          <h1 className="text-2xl font-bold" style={{ color: '#ff6b35', textShadow: '0 0 10px #ff6b3566' }}>
+            Deudas
+          </h1>
         </div>
         <div className="space-y-4">
-          {[1, 2, 3].map((i) => (
-            <Card key={i} className="border-neon-purple/20 animate-pulse">
-              <CardContent className="p-6">
-                <div className="h-4 bg-muted rounded w-1/3 mb-4" />
-                <div className="h-3 bg-muted rounded w-2/3 mb-2" />
-                <div className="h-2 bg-muted rounded w-full mb-4" />
-                <div className="h-8 bg-muted rounded w-1/4" />
-              </CardContent>
-            </Card>
-          ))}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {[1, 2].map((i) => (
+              <Card key={i} className="border-[#ff6b35]/20 animate-pulse">
+                <CardContent className="p-4">
+                  <div className="h-4 bg-muted rounded w-1/3 mb-2" />
+                  <div className="h-6 bg-muted rounded w-2/3" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          <Card className="border-[#ff6b35]/20 animate-pulse">
+            <CardContent className="p-6">
+              <div className="h-40 bg-muted rounded" />
+            </CardContent>
+          </Card>
         </div>
       </div>
     )
   }
 
   return (
-    <div className="page-enter p-6 cyber-scrollbar overflow-y-auto h-full">
+    <div className="page-enter p-4 md:p-6 space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <CreditCard className="size-7 text-neon-purple" />
-          <h1 className="text-2xl font-bold text-neon-purple">Deudas</h1>
+          <CreditCard className="size-7" style={{ color: '#ff6b35' }} />
+          <h1
+            className="text-2xl font-bold"
+            style={{ color: '#ff6b35', textShadow: '0 0 10px #ff6b3566' }}
+          >
+            Deudas
+          </h1>
         </div>
         <Button
           onClick={openCreateDebt}
-          className="bg-neon-purple/20 border border-neon-purple/50 text-neon-purple hover:bg-neon-purple/30 hover:shadow-neon-pink transition-all"
+          className="bg-[#ff6b35]/20 border border-[#ff6b35]/50 text-[#ff6b35] hover:bg-[#ff6b35]/30 hover:shadow-[0_0_10px_#ff6b3544] transition-all"
         >
           <Plus className="size-4 mr-2" />
           Nueva Deuda
@@ -325,10 +325,13 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
       </div>
 
       {/* Empty State */}
-      {!debts || debts.length === 0 ? (
-        <Card className="border-neon-purple/20">
+      {debtList.length === 0 ? (
+        <Card
+          className="border-[#ff6b35]/20"
+          style={{ boxShadow: '0 0 10px #ff6b3510' }}
+        >
           <CardContent className="p-12 text-center">
-            <CreditCard className="size-16 text-neon-purple/30 mx-auto mb-4" />
+            <CreditCard className="size-16 mx-auto mb-4" style={{ color: '#ff6b3540' }} />
             <h3 className="text-lg font-medium text-muted-foreground mb-2">
               No hay deudas registradas
             </h3>
@@ -337,7 +340,7 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
             </p>
             <Button
               onClick={openCreateDebt}
-              className="bg-neon-purple/20 border border-neon-purple/50 text-neon-purple hover:bg-neon-purple/30"
+              className="bg-[#ff6b35]/20 border border-[#ff6b35]/50 text-[#ff6b35] hover:bg-[#ff6b35]/30"
             >
               <Plus className="size-4 mr-2" />
               Agregar Deuda
@@ -345,195 +348,139 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
           </CardContent>
         </Card>
       ) : (
-        /* Debts List */
         <div className="space-y-4">
-          {debts.map((debt) => {
-            const paidAmount = getPaidAmount(debt)
-            const paidPercentage = getPaidPercentage(debt)
-            const isActive = debt.status === 'active'
-            const isExpanded = expandedDebtId === debt.id
+          {/* Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Card
+              className="border-[#ff6b35]/30 bg-card/80"
+              style={{ boxShadow: '0 0 10px #ff6b3520' }}
+            >
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Total Deuda</p>
+                <p className="text-2xl font-bold" style={{ color: '#ff6b35' }}>
+                  {formatCurrency(totalDebt)}
+                </p>
+              </CardContent>
+            </Card>
+            <Card
+              className="border-[#01ff89]/30 bg-card/80"
+              style={{ boxShadow: '0 0 10px #01ff8920' }}
+            >
+              <CardContent className="p-4">
+                <p className="text-xs text-muted-foreground">Total Pagado</p>
+                <p className="text-2xl font-bold" style={{ color: '#01ff89' }}>
+                  {formatCurrency(totalPaid)}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
 
-            return (
-              <Card
-                key={debt.id}
-                className={`border-neon-purple/20 hover:border-neon-purple/40 transition-all ${
-                  isActive ? 'hover:shadow-neon-pink' : 'opacity-70'
-                }`}
-              >
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div>
-                        <CardTitle className="text-base text-foreground">{debt.name}</CardTitle>
-                        <p className="text-sm text-muted-foreground">{debt.creditor}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        className={
-                          isActive
-                            ? 'border-neon-pink/50 text-neon-pink bg-neon-pink/10'
-                            : 'border-neon-green/50 text-neon-green bg-neon-green/10'
-                        }
-                        variant="outline"
-                      >
-                        {DEBT_STATUS[debt.status] || debt.status}
-                      </Badge>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditDebt(debt)}
-                        className="size-8 p-0 text-muted-foreground hover:text-neon-purple"
-                      >
-                        <Pencil className="size-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => confirmDeleteDebt(debt)}
-                        className="size-8 p-0 text-muted-foreground hover:text-neon-pink"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  {/* Progress info */}
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-neon-green font-medium">
-                      {formatCurrency(paidAmount)} pagado
-                    </span>
-                    <span className="text-muted-foreground">
-                      de {formatCurrency(debt.totalAmount)}
-                    </span>
-                  </div>
+          {/* Table */}
+          <Card
+            className="border-[#ff6b35]/20 bg-card/80 backdrop-blur-sm"
+            style={{ boxShadow: '0 0 15px #ff6b3510' }}
+          >
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader>
+                    <TableRow className="border-[#ff6b35]/10 hover:bg-transparent">
+                      <TableHead className="text-muted-foreground">Nombre</TableHead>
+                      <TableHead className="text-muted-foreground hidden sm:table-cell">Acreedor</TableHead>
+                      <TableHead className="text-muted-foreground text-right">Total</TableHead>
+                      <TableHead className="text-muted-foreground text-right">Restante</TableHead>
+                      <TableHead className="text-muted-foreground text-right hidden md:table-cell">Tasa Interés %</TableHead>
+                      <TableHead className="text-muted-foreground text-right hidden lg:table-cell">Pago Mensual</TableHead>
+                      <TableHead className="text-muted-foreground text-center">Estado</TableHead>
+                      <TableHead className="text-muted-foreground hidden lg:table-cell">Fecha Fin</TableHead>
+                      <TableHead className="text-muted-foreground text-right">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {debtList.map((debt) => {
+                      const isActive = debt.status === 'active'
 
-                  {/* Progress bar with dual colors */}
-                  <div className="relative h-3 w-full overflow-hidden rounded-full bg-muted">
-                    {/* Paid portion in green */}
-                    <div
-                      className="absolute top-0 left-0 h-full rounded-full transition-all"
-                      style={{
-                        width: `${paidPercentage}%`,
-                        backgroundColor: '#01ff89',
-                        boxShadow: '0 0 8px rgba(1, 255, 137, 0.4)',
-                      }}
-                    />
-                    {/* Remaining portion indicator */}
-                    <div
-                      className="absolute top-0 right-0 h-full rounded-r-full transition-all"
-                      style={{
-                        width: `${100 - paidPercentage}%`,
-                        backgroundColor: '#d300c533',
-                      }}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                    <div className="flex items-center gap-1.5">
-                      <TrendingDown className="size-3 text-neon-pink" />
-                      <div>
-                        <p className="text-muted-foreground">Restante</p>
-                        <p className="text-neon-pink font-medium">{formatCurrency(debt.remainingAmount)}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Percent className="size-3 text-neon-yellow" />
-                      <div>
-                        <p className="text-muted-foreground">Tasa</p>
-                        <p className="text-neon-yellow font-medium">{debt.interestRate}%</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Banknote className="size-3 text-neon-purple" />
-                      <div>
-                        <p className="text-muted-foreground">Cuota Mensual</p>
-                        <p className="text-neon-purple font-medium">{formatCurrency(debt.monthlyPayment)}</p>
-                      </div>
-                    </div>
-                    {debt.endDate && (
-                      <div className="flex items-center gap-1.5">
-                        <CalendarDays className="size-3 text-muted-foreground" />
-                        <div>
-                          <p className="text-muted-foreground">Fecha Fin</p>
-                          <p className="font-medium">{formatDate(debt.endDate)}</p>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Action buttons */}
-                  <div className="flex items-center gap-2 pt-1">
-                    {isActive && (
-                      <Button
-                        size="sm"
-                        onClick={() => openPaymentDialog(debt)}
-                        className="bg-neon-green/15 border border-neon-green/40 text-neon-green hover:bg-neon-green/25 text-xs"
-                      >
-                        <Banknote className="size-3 mr-1" />
-                        Pagar
-                      </Button>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={() => togglePayments(debt.id)}
-                      className="text-xs text-muted-foreground hover:text-neon-purple"
-                    >
-                      {isExpanded ? <ChevronUp className="size-3 mr-1" /> : <ChevronDown className="size-3 mr-1" />}
-                      Historial de pagos
-                    </Button>
-                  </div>
-
-                  {/* Payment history */}
-                  {isExpanded && (
-                    <div className="max-h-48 overflow-y-auto cyber-scrollbar space-y-1.5 pt-1">
-                      {loadingPayments ? (
-                        <p className="text-xs text-muted-foreground text-center py-2">Cargando...</p>
-                      ) : payments.length === 0 ? (
-                        <p className="text-xs text-muted-foreground text-center py-2">
-                          Sin pagos registrados
-                        </p>
-                      ) : (
-                        payments.map((payment) => (
-                          <div
-                            key={payment.id}
-                            className="flex items-center justify-between text-xs py-1.5 px-2 rounded bg-muted/30"
+                      return (
+                        <TableRow
+                          key={debt.id}
+                          className={`border-[#ff6b35]/5 hover:bg-[#ff6b35]/5 transition-colors ${
+                            !isActive ? 'opacity-60' : ''
+                          }`}
+                        >
+                          <TableCell className="font-medium">{debt.name}</TableCell>
+                          <TableCell className="hidden sm:table-cell text-muted-foreground">
+                            {debt.creditor}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">
+                            {formatCurrency(debt.totalAmount)}
+                          </TableCell>
+                          <TableCell
+                            className="text-right font-mono font-semibold"
+                            style={{ color: debt.remainingAmount === 0 ? '#01ff89' : '#ff6b35' }}
                           >
-                            <div className="flex items-center gap-2">
-                              <Banknote className="size-3 text-neon-green" />
-                              {payment.description && (
-                                <span className="text-muted-foreground truncate max-w-[120px]">
-                                  {payment.description}
-                                </span>
+                            {formatCurrency(debt.remainingAmount)}
+                          </TableCell>
+                          <TableCell className="text-right font-mono hidden md:table-cell" style={{ color: '#f9f002' }}>
+                            {debt.interestRate}%
+                          </TableCell>
+                          <TableCell className="text-right font-mono hidden lg:table-cell" style={{ color: '#d300c5' }}>
+                            {formatCurrency(debt.monthlyPayment)}
+                          </TableCell>
+                          <TableCell className="text-center">
+                            <DebtStatusBadge status={debt.status} />
+                          </TableCell>
+                          <TableCell className="hidden lg:table-cell text-muted-foreground">
+                            {debt.endDate ? formatDate(debt.endDate) : '—'}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              {isActive && (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="size-7 text-muted-foreground hover:text-neon-green"
+                                  onClick={() => openPaymentDialog(debt)}
+                                  title="Pagar"
+                                >
+                                  <Banknote className="size-3.5" />
+                                </Button>
                               )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-7 text-muted-foreground hover:text-neon-blue"
+                                onClick={() => openEditDebt(debt)}
+                                title="Editar"
+                              >
+                                <Pencil className="size-3.5" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="size-7 text-muted-foreground hover:text-neon-pink"
+                                onClick={() => confirmDeleteDebt(debt)}
+                                title="Eliminar"
+                              >
+                                <Trash2 className="size-3.5" />
+                              </Button>
                             </div>
-                            <div className="flex items-center gap-2">
-                              <span className="text-neon-green font-medium">
-                                {formatCurrency(payment.amount)}
-                              </span>
-                              <span className="text-muted-foreground">
-                                {formatDate(payment.createdAt)}
-                              </span>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )
-          })}
+                          </TableCell>
+                        </TableRow>
+                      )
+                    })}
+                  </TableBody>
+                </Table>
+              </div>
+            </CardContent>
+          </Card>
         </div>
       )}
 
       {/* ─── Create/Edit Debt Dialog ──────────────────────────────── */}
       <Dialog open={debtDialogOpen} onOpenChange={setDebtDialogOpen}>
-        <DialogContent className="bg-card border-neon-purple/20 max-h-[90vh] overflow-y-auto">
+        <DialogContent className="bg-card border-[#ff6b35]/20 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="text-neon-purple">
+            <DialogTitle style={{ color: '#ff6b35' }}>
               {editingDebt ? 'Editar Deuda' : 'Nueva Deuda'}
             </DialogTitle>
             <DialogDescription>
@@ -555,7 +502,7 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
                       <Input
                         placeholder="Ej: Préstamo personal"
                         {...field}
-                        className="border-neon-purple/20 focus:border-neon-purple/50"
+                        className="border-[#ff6b35]/20 focus:border-[#ff6b35]/50"
                       />
                     </FormControl>
                     <FormMessage />
@@ -573,7 +520,7 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
                       <Input
                         placeholder="Ej: Banco de Chile"
                         {...field}
-                        className="border-neon-purple/20 focus:border-neon-purple/50"
+                        className="border-[#ff6b35]/20 focus:border-[#ff6b35]/50"
                       />
                     </FormControl>
                     <FormMessage />
@@ -594,7 +541,7 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
                           placeholder="0"
                           {...field}
                           onChange={(e) => field.onChange(Number(e.target.value) || 0)}
-                          className="border-neon-purple/20 focus:border-neon-purple/50"
+                          className="border-[#ff6b35]/20 focus:border-[#ff6b35]/50"
                         />
                       </FormControl>
                       <FormMessage />
@@ -613,7 +560,7 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
                           placeholder="0"
                           {...field}
                           onChange={(e) => field.onChange(Number(e.target.value) || 0)}
-                          className="border-neon-purple/20 focus:border-neon-purple/50"
+                          className="border-[#ff6b35]/20 focus:border-[#ff6b35]/50"
                         />
                       </FormControl>
                       <FormMessage />
@@ -636,7 +583,7 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
                           placeholder="0"
                           {...field}
                           onChange={(e) => field.onChange(Number(e.target.value) || 0)}
-                          className="border-neon-purple/20 focus:border-neon-purple/50"
+                          className="border-[#ff6b35]/20 focus:border-[#ff6b35]/50"
                         />
                       </FormControl>
                       <FormMessage />
@@ -655,7 +602,7 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
                           placeholder="0"
                           {...field}
                           onChange={(e) => field.onChange(Number(e.target.value) || 0)}
-                          className="border-neon-purple/20 focus:border-neon-purple/50"
+                          className="border-[#ff6b35]/20 focus:border-[#ff6b35]/50"
                         />
                       </FormControl>
                       <FormMessage />
@@ -672,7 +619,7 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
                     <FormLabel>Estado</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
-                        <SelectTrigger className="border-neon-purple/20 focus:border-neon-purple/50 w-full">
+                        <SelectTrigger className="border-[#ff6b35]/20 focus:border-[#ff6b35]/50 w-full">
                           <SelectValue placeholder="Selecciona el estado" />
                         </SelectTrigger>
                       </FormControl>
@@ -696,7 +643,7 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
                       <Input
                         type="date"
                         {...field}
-                        className="border-neon-purple/20 focus:border-neon-purple/50"
+                        className="border-[#ff6b35]/20 focus:border-[#ff6b35]/50"
                       />
                     </FormControl>
                     <FormMessage />
@@ -715,7 +662,7 @@ export function DebtsPage({ currentMonth, currentYear }: { currentMonth?: number
                 <Button
                   type="submit"
                   disabled={submittingDebt}
-                  className="bg-neon-purple/20 border border-neon-purple/50 text-neon-purple hover:bg-neon-purple/30"
+                  className="bg-[#ff6b35]/20 border border-[#ff6b35]/50 text-[#ff6b35] hover:bg-[#ff6b35]/30"
                 >
                   {submittingDebt ? 'Guardando...' : editingDebt ? 'Actualizar' : 'Crear Deuda'}
                 </Button>

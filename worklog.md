@@ -2,6 +2,202 @@
 
 ---
 
+## Task R2-table-pages: Budgets, Debts, Accounts & Transactions Table Redesign
+
+**Agent**: table-pages-redesign
+**Date**: 2026-03-04
+**Status**: ✅ Complete
+
+### Summary
+Redesigned 4 page components (Budgets, Debts, Accounts, Transactions) from card-based layouts to TABLE-based layouts matching the video reference design. All pages feature summary cards at top, themed neon borders/glows, colored badges, and per-column color theming. Full CRUD functionality preserved with dialogs.
+
+### Files Modified
+
+| File | Description |
+|------|-------------|
+| `/src/components/finance/budgets-page.tsx` | Complete rewrite: card grid → TABLE layout with 3 summary cards + TOTAL row |
+| `/src/components/finance/debts-page.tsx` | Complete rewrite: card list → TABLE layout with orange neon theme + status badges |
+| `/src/components/finance/accounts-page.tsx` | Complete rewrite: card grid → TABLE layout with cyan theme + type badges |
+| `/src/components/finance/transactions-page.tsx` | Updated: colored category badges, themed filter tabs, neon hover effects |
+
+### Design Pattern Applied (consistent across all 4 pages)
+
+1. **Page title** with themed neon color and glow text-shadow
+2. **2-3 Summary cards** at top with themed neon borders and colored values
+3. **Action button(s)** with themed neon border
+4. **TABLE layout** (shadcn/ui Table) with per-column color theming and neon hover effects
+5. **Colored badges** (PercentageBadge, DebtStatusBadge, AccountTypeBadge, CategoryBadge)
+6. **Themed neon border** on the table container card with subtle glow
+7. **Responsive**: Columns hidden on smaller screens (sm:, md:, lg: breakpoints)
+
+### Budgets Page (`budgets-page.tsx`) — Theme: Cyan (#05d9e8) / Yellow (#f9f002)
+
+- **Title**: "Presupuestos" in neon-cyan
+- **3 Summary Cards**: Total Presupuestado (cyan), Total Gastado (pink #ff2a6d), Total Restante (green #01ff89 / pink if negative)
+- **Action Button**: "Agregar Presupuesto" (yellow neon border)
+- **Table Columns**: Categoría (emoji + name), Presupuestado (cyan), Gastado (pink), Restante (green/pink), Porcentaje (PercentageBadge: green <75%, yellow 75-100%, pink >100%), Acciones (Edit blue, Delete red)
+- **TOTAL Row**: Yellow "TOTAL" text, cyan/pink/green amounts, PercentageBadge for overall
+- **Dialogs**: BudgetDialog (create/edit), DeleteBudgetDialog — all preserved
+
+### Debts Page (`debts-page.tsx`) — Theme: Orange (#ff6b35)
+
+- **Title**: "Deudas" in orange neon with glow text-shadow
+- **2 Summary Cards**: Total Deuda (orange), Total Pagado (green)
+- **Action Button**: "+ Nueva Deuda" (orange neon border)
+- **Table Columns**: Nombre, Acreedor (hidden sm+), Total, Restante (green if 0, orange if >0), Tasa Interés % (yellow, hidden md+), Pago Mensual (purple, hidden lg+), Estado (DebtStatusBadge: Activa=orange, Pagada=green), Fecha Fin (hidden lg+), Acciones (Pay green, Edit blue, Delete red)
+- **Inactive debts**: opacity-60 for paid debts
+- **Dialogs**: Create/Edit Debt, Payment, Delete — all preserved
+
+### Accounts Page (`accounts-page.tsx`) — Theme: Cyan (#05d9e8) / Purple (#8b5cf6)
+
+- **Title**: "Cuentas" in cyan neon with glow text-shadow + account counter
+- **Summary Card**: Total Neto (cyan) with account count
+- **2 Action Buttons**: "Transferir" (purple neon), "Nueva Cuenta" (cyan neon)
+- **Table Columns**: Icono (emoji), Nombre, Tipo (AccountTypeBadge: Corriente/Ahorro/Efectivo=cyan, Crédito=purple), Balance (cyan for positive, purple/pink for credit), Moneda (hidden sm+), Notas (hidden md+), Acciones (Edit blue, Delete red)
+- **Dialogs**: Create/Edit Account, Transfer, Delete — all preserved
+
+### Transactions Page (`transactions-page.tsx`) — Theme: Cyan (#05d9e8)
+
+- **Title**: "Transacciones" in neon-cyan
+- **Filter Tabs**: Todos / Ingreso (green) / Gasto (pink) / Transferencia (cyan) — with data-[state=active] color styling
+- **Category Column**: CategoryBadge with dynamic color from category.color — colored pill with bg, border, and text using inline styles
+- **Amount Column**: Color-coded using inline style — green (#01ff89) for income, pink (#ff2a6d) for expenses, cyan (#05d9e8) for transfers
+- **Split/Transfer badges**: Inline-styled colored pills (purple for Split, cyan for transfer)
+- **Neon hover**: `hover:bg-neon-cyan/5` on table rows
+- **Table container**: neon-cyan/10 border with subtle glow box-shadow
+- **Dialogs**: Transaction (create/edit), Transfer, Split, Delete — all preserved
+
+### Key Implementation Details
+
+- All four components use `'use client'` directive
+- CategoryBadge/StatusBadge components use inline styles for dynamic coloring (not Tailwind) for flexibility
+- Table rows use themed `border-[color]/5` and `hover:bg-[color]/5` for subtle cyberpunk hover
+- Summary cards use `border-[color]/30` with `boxShadow: 0 0 10px [color]20` for neon glow
+- Responsive column visibility: Primary columns always visible; secondary columns hidden at sm/md/lg breakpoints
+- Loading states: Skeleton cards for summary + skeleton table
+- Empty states: Centered message with CTA button matching theme color
+- All text in Spanish (Chile), currency as CLP via `formatCurrency`, dates via `formatDate`
+- Uses `.delete(id)` NOT `.remove(id)`
+- Uses `debtService.addPayment()` (NOT createPayment)
+- **Lint**: 0 errors, 1 pre-existing warning (services-page.tsx react-hooks/incompatible-library)
+
+---
+
+## Task R3-other-pages: Savings, Recurring & Services Pages Redesign
+
+**Agent**: other-pages-redesign
+**Date**: 2026-03-04
+**Status**: ✅ Complete
+
+### Summary
+Redesigned the Savings (Metas de Ahorro), Recurring (Pagos Recurrentes), and Services (Servicios) pages to match the video reference's TABLE-based design style. All three pages were converted from card-based layouts to shadcn/ui Table-based layouts with summary cards at the top, themed neon borders/glows, and CategoryBadge colored pill components. Full CRUD functionality preserved.
+
+### Files Modified
+
+| File | Description |
+|------|-------------|
+| `/src/components/finance/savings-page.tsx` | Complete rewrite: card grid → TABLE layout with summary cards |
+| `/src/components/finance/recurring-page.tsx` | Complete rewrite: card list → TABLE layout with summary cards |
+| `/src/components/finance/services-page.tsx` | Complete rewrite: collapsible cards → TABLE layout with expandable bills sub-table + summary cards |
+
+### Design Pattern Applied (consistent across all 3 pages)
+
+1. **Page title** with themed neon color and glow text-shadow
+2. **2-3 Summary cards** at top with themed neon borders and icon badges
+3. **Action button** with themed neon border ("Nueva Meta" / "Nuevo Recurrente" / "Nuevo Servicio")
+4. **TABLE layout** (shadcn/ui Table) with colored column headers and neon hover effects
+5. **CategoryBadge** component as colored pills (inline-styled with dynamic color)
+6. **Themed neon border** on the table container card
+7. **Responsive**: Columns hidden on smaller screens (sm:, md:, lg: breakpoints)
+
+### Savings Page (`savings-page.tsx`) — Theme: Cyan (#00fff5 / #05d9e8)
+
+- **3 Summary Cards**: Total Ahorrado (cyan), Meta Total (green), Progreso (yellow with %)
+- **Table Columns**: Nombre (icon+name), Meta (cyan), Ahorrado (green, hidden sm+), Restante (yellow/pink if over, hidden md+), Progreso (progress bar + %, hidden lg+), Fecha Límite, Acciones
+- **Actions per row**: Deposit (green), Withdraw (yellow), Edit (blue), Delete (red), Expand history (cyan)
+- **Expanded rows**: Movement history (deposits/withdrawals) loaded on-demand
+- **Dialogs**: Create/Edit goal, Deposit, Withdraw, Delete confirmation — all preserved
+
+### Recurring Page (`recurring-page.tsx`) — Theme: Cyan (#00fff5 / #05d9e8)
+
+- **3 Summary Cards**: Total Recurrentes (cyan, sum of active amounts), Activos (green, count), Próximo Vencimiento (orange, earliest next due date)
+- **Table Columns**: Nombre (Repeat icon+name), Monto (cyan), Intervalo (colored pill: Mensual=cyan, Semanal=blue, Anual=yellow, hidden sm+), Día de Pago (hidden md+), Próximo Vencimiento (hidden lg+), Categoría (CategoryBadge with dynamic color, hidden lg+), Estado (Activo=green/Inactivo=gray pill, hidden sm+), Acciones
+- **Actions per row**: Pay (green, only if active), Edit (blue), Delete (red)
+- **Inactive rows**: Reduced opacity (opacity-50)
+- **Dialogs**: Create/Edit recurring, Pay confirmation, Delete confirmation — all preserved
+
+### Services Page (`services-page.tsx`) — Theme: Orange/Yellow (#ff6b35 / #f9f002)
+
+- **3 Summary Cards**: Total Servicios (orange, sum of active amounts), Pagadas (green, count of paid bills), Pendientes (pink, count of unpaid bills)
+- **Table Columns**: Nombre (expand chevron + Receipt icon + name), Proveedor (hidden sm+), Monto (orange), Día de Pago (hidden md+), Categoría (CategoryBadge, hidden lg+), Estado (Activo=green/Inactivo=gray, hidden sm+), Acciones (Edit blue, Delete red)
+- **Expandable Bills Sub-Table**: Per-service expandable row showing bills in a nested Table with columns: Fecha Vencimiento, Monto, Estado (Pagada=green / Pendiente=pink), Fecha Pago, Acción (Pagar/Anular)
+- **ServiceBillSummaryCard**: Helper component that counts paid/unpaid bills across all accounts
+- **BillsSubTable**: Helper component rendering a nested Table for bills with pay/unpay actions
+- **Inactive rows**: Reduced opacity (opacity-50)
+- **Dialogs**: Create/Edit account, Create bill, Delete confirmation — all preserved
+
+### Key Implementation Details
+
+- All three components use `'use client'` directive
+- CategoryBadge component defined in each file with dynamic inline styling (`backgroundColor: color+22, border: color+44, color`)
+- Status badges use inline styles for dynamic coloring (not Tailwind classes) for flexibility
+- Table rows use `border-neon-{color}/5` and `hover:bg-neon-{color}/5` for subtle cyberpunk hover effects
+- Responsive column visibility: Nombre and Monto always visible; secondary columns hidden at sm/md/lg breakpoints
+- Loading states: Skeleton cards for summary + skeleton table card
+- Empty states: Centered message with CTA button matching theme color
+- All text in Spanish (Chile), currency as CLP via `formatCurrency`, dates via `formatDate`
+- Uses `.delete(id)` NOT `.remove(id)` and `.addMovement()` NOT `.createMovement()`
+- **Lint**: 0 errors, 1 pre-existing warning (services-page.tsx react-hooks/incompatible-library from `watch()`)
+
+---
+
+## Task R1-dashboard: Dashboard Redesign
+
+**Agent**: dashboard-redesign
+**Date**: 2026-03-04
+**Status**: ✅ Complete
+
+### Summary
+Completely rewrote the Dashboard page (`dashboard-page.tsx`) to match a specific video reference design for a Cyberpunk/Neon personal finance app. The new design features 8 themed neon stat cards, budget progress bars with category details, balance projection, upcoming due dates, expense category pie chart, and monthly trend area chart — all with consistent per-section neon border colors, glow shadows, and framer-motion entrance animations.
+
+### Files Modified
+
+| File | Description |
+|------|-------------|
+| `/src/components/finance/dashboard-page.tsx` | Complete rewrite: 7-section dashboard matching video reference design |
+
+### Component Structure (Top to Bottom)
+
+1. **Header**: "Dashboard" title in neon-blue with glow text-shadow, subtitle "Resumen financiero — {Month} {Year}"
+2. **8 Stat Cards Row**: Responsive grid (2→4→8 cols) with themed neon borders/glows:
+   - Ingresos (green), Gastos (pink), Gastos Ajustados (orange), Balance (cyan)
+   - Servicios (orange, "X pagadas - $Y pendiente"), Deudas (pink, "X activas - Cuota: $Y")
+   - Ahorro (cyan, "Meta: $Y - Tasa: X%"), Presupuesto (yellow, "$spent / $budgeted")
+3. **Presupuestos Section** (yellow neon border): Over-budget warning, category progress bars (green <75%, yellow 75-100%, pink >100%), TOTAL PRESUPUESTO summary box with yellow border (Presupuesto/Gastado/Restante)
+4. **Proyección de Balance** (cyan neon border): Promedio 3 meses, Balance proyectado, Tendencia (Positiva▲/Negativa▼)
+5. **Próximos Vencimientos** (orange neon border): Combined service bills + recurring payments, colored icon circles, due date, amount, "En X días"
+6. **Gastos por Categoría** (pink neon border): Recharts PieChart donut with custom legend
+7. **Tendencia Mensual** (cyan neon border): Recharts AreaChart with gradient fills for income/expenses
+
+### Key Implementation Details
+
+- **Neon Color System**: Centralized `NEON_COLORS` map with hex/rgb values, `neonBorderClass()`, `neonShadow()`, `neonTextClass()` helpers
+- **formatCurrencyK()**: Compact currency format ($120.0K, $1.5M) for budget progress bars
+- **SectionCard**: Reusable wrapper with themed neon border, shadow, icon + title
+- **Extended Data Fetching**: useEffect fetches additional data from Dexie DB when `data` loads:
+  - Service summary (paid count, pending amount) from `db.serviceBills`
+  - Debt summary (active count, monthly payment) from `db.debts`
+  - Savings summary (target, rate) from `db.savingsGoals`
+  - Upcoming due dates (service bills + recurring payments)
+  - Budget category details with icons/colors from `db.expenseCategories`
+- **Budget Progress Bars**: Custom thin bars with rounded ends, color-coded glow effect, percentage overflow badges
+- **Upcoming Due Items**: Combined from serviceBills + recurringPayments, sorted by days remaining, with colored icon circles
+- **Balance Projection**: Last 3 months average, trend direction (positive/negative) with arrow indicators
+- **All text in Spanish**: Labels, amounts, dates, empty states
+- **Lint**: 0 errors, 0 new warnings (1 pre-existing warning in services-page.tsx)
+
+---
+
 ## Task 7-savings-debts-recurring: Savings, Debts & Recurring Pages
 
 **Agent**: savings-debts-recurring

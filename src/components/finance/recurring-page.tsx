@@ -15,18 +15,30 @@ import {
   Tag,
   Power,
   PowerOff,
+  CheckCircle,
+  Clock,
+  Loader2,
+  AlertTriangle,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { recurringService, categoryService, useAsyncData } from '@/lib/data'
 import { formatCurrency, formatDate, RECURRING_INTERVALS } from '@/lib/finance-utils'
 import type { RecurringPayment, ExpenseCategory } from '@/lib/db-client'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import {
   Dialog,
   DialogContent,
@@ -61,6 +73,20 @@ import {
   FormMessage,
 } from '@/components/ui/form'
 
+// ─── CategoryBadge ─────────────────────────────────────────────────
+
+function CategoryBadge({ name, color }: { name: string; color?: string }) {
+  const c = color || '#05d9e8'
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+      style={{ backgroundColor: c + '22', border: `1px solid ${c}44`, color: c }}
+    >
+      {name}
+    </span>
+  )
+}
+
 // ─── Zod Schemas ────────────────────────────────────────────────────
 
 const recurringSchema = z.object({
@@ -75,6 +101,10 @@ const recurringSchema = z.object({
 
 type RecurringForm = z.infer<typeof recurringSchema>
 
+// ─── Theme Colors ────────────────────────────────────────────────────
+
+const CYAN = '#00fff5'
+
 // ─── Component ──────────────────────────────────────────────────────
 
 export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: number; currentYear?: number }) {
@@ -84,7 +114,7 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
     []
   )
 
-  // Expense categories for select
+  // Expense categories for select & badge display
   const [expenseCategories, setExpenseCategories] = useState<ExpenseCategory[]>([])
   useEffect(() => {
     categoryService.getAll('expense').then((cats) => {
@@ -231,206 +261,279 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
 
   // ─── Helpers ─────────────────────────────────────────────────────
 
-  const getCategoryName = (categoryId?: string) => {
+  const getCategoryInfo = (categoryId?: string) => {
     if (!categoryId) return null
     const cat = expenseCategories.find((c) => c.id === categoryId)
-    return cat?.name || null
+    return cat ? { name: cat.name, color: cat.color } : null
   }
 
   const getIntervalBadge = (interval: string) => {
-    const colors: Record<string, string> = {
-      monthly: 'border-neon-cyan/50 text-neon-cyan bg-neon-cyan/10',
-      weekly: 'border-neon-blue/50 text-neon-blue bg-neon-blue/10',
-      yearly: 'border-neon-yellow/50 text-neon-yellow bg-neon-yellow/10',
+    const config: Record<string, { color: string; bg: string; border: string; label: string }> = {
+      monthly: { color: '#05d9e8', bg: '#05d9e822', border: '#05d9e844', label: 'Mensual' },
+      weekly: { color: '#4deeea', bg: '#4deeea22', border: '#4deeea44', label: 'Semanal' },
+      yearly: { color: '#f9f002', bg: '#f9f00222', border: '#f9f00244', label: 'Anual' },
     }
+    const c = config[interval]
+    if (!c) return <span className="text-xs text-muted-foreground">{interval}</span>
     return (
-      <Badge
-        variant="outline"
-        className={colors[interval] || 'border-muted text-muted-foreground'}
+      <span
+        className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+        style={{ backgroundColor: c.bg, border: `1px solid ${c.border}`, color: c.color }}
       >
-        {RECURRING_INTERVALS[interval] || interval}
-      </Badge>
+        {c.label}
+      </span>
     )
   }
+
+  // ─── Computed summary ────────────────────────────────────────────
+
+  const activeRecurring = recurringPayments?.filter((r) => r.isActive) ?? []
+  const totalRecurring = activeRecurring.reduce((sum, r) => sum + r.amount, 0)
+  const activeCount = activeRecurring.length
+
+  // Next due date (earliest among active)
+  const nextDueDate = activeRecurring.length > 0
+    ? activeRecurring.reduce((earliest, r) => {
+        const d = new Date(r.nextDueDate)
+        const e = new Date(earliest)
+        return d < e ? r.nextDueDate : earliest
+      }, activeRecurring[0].nextDueDate)
+    : null
 
   // ─── Render ──────────────────────────────────────────────────────
 
   if (loading) {
     return (
-      <div className="page-enter p-6">
-        <div className="flex items-center justify-between mb-6">
+      <div className="page-enter p-4 md:p-6 space-y-4">
+        <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-neon-cyan">Pagos Recurrentes</h1>
         </div>
-        <div className="space-y-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[1, 2, 3].map((i) => (
             <Card key={i} className="border-neon-cyan/20 animate-pulse">
-              <CardContent className="p-6">
-                <div className="h-4 bg-muted rounded w-1/3 mb-4" />
-                <div className="h-3 bg-muted rounded w-1/2 mb-2" />
-                <div className="h-3 bg-muted rounded w-1/4" />
+              <CardContent className="p-4">
+                <div className="h-4 bg-muted rounded w-1/2 mb-3" />
+                <div className="h-6 bg-muted rounded w-2/3" />
               </CardContent>
             </Card>
           ))}
         </div>
+        <Card className="border-neon-cyan/10 animate-pulse">
+          <CardContent className="p-6">
+            <div className="h-40 bg-muted rounded" />
+          </CardContent>
+        </Card>
       </div>
     )
   }
 
   return (
-    <div className="page-enter p-6 cyber-scrollbar overflow-y-auto h-full">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+    <div className="page-enter p-4 md:p-6 space-y-4 overflow-auto">
+      {/* ── Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
-          <Repeat className="size-7 text-neon-cyan" />
-          <h1 className="text-2xl font-bold text-neon-cyan">Pagos Recurrentes</h1>
+          <div className="flex items-center justify-center size-10 rounded-lg border border-neon-cyan/30 bg-neon-cyan/10">
+            <Repeat className="size-5 text-neon-cyan" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold" style={{ color: CYAN, textShadow: `0 0 20px ${CYAN}44` }}>
+              Pagos Recurrentes
+            </h1>
+            <p className="text-sm text-muted-foreground">Gestiona tus pagos periódicos</p>
+          </div>
         </div>
         <Button
           onClick={openCreateRecurring}
-          className="bg-neon-cyan/20 border border-neon-cyan/50 text-neon-cyan hover:bg-neon-cyan/30 hover:shadow-neon-blue transition-all"
+          className="bg-neon-cyan/20 border border-neon-cyan/50 text-neon-cyan hover:bg-neon-cyan/30 hover:shadow-[0_0_15px_rgba(5,217,232,0.3)] transition-all"
         >
-          <Plus className="size-4 mr-2" />
+          <Plus className="size-4" />
           Nuevo Recurrente
         </Button>
       </div>
 
-      {/* Empty State */}
-      {!recurringPayments || recurringPayments.length === 0 ? (
-        <Card className="border-neon-cyan/20">
-          <CardContent className="p-12 text-center">
-            <Repeat className="size-16 text-neon-cyan/30 mx-auto mb-4" />
-            <h3 className="text-lg font-medium text-muted-foreground mb-2">
-              No hay pagos recurrentes
-            </h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Agrega tus pagos recurrentes para no olvidar ninguna fecha
-            </p>
+      {/* ── Summary Cards ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Total Recurrentes */}
+        <Card className="border-neon-cyan/20 bg-card/50 backdrop-blur-sm">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="flex items-center justify-center size-10 rounded-lg bg-neon-cyan/10 border border-neon-cyan/30">
+              <Banknote className="size-5 text-neon-cyan" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Total Recurrentes</p>
+              <p className="text-lg font-bold text-neon-cyan font-mono">{formatCurrency(totalRecurring)}</p>
+            </div>
+          </CardContent>
+        </Card>
+        {/* Activos */}
+        <Card className="border-neon-green/20 bg-card/50 backdrop-blur-sm">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="flex items-center justify-center size-10 rounded-lg bg-neon-green/10 border border-neon-green/30">
+              <CheckCircle className="size-5 text-neon-green" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Activos</p>
+              <p className="text-lg font-bold text-neon-green font-mono">{activeCount}</p>
+            </div>
+          </CardContent>
+        </Card>
+        {/* Próximo Vencimiento */}
+        <Card className="border-neon-orange/20 bg-card/50 backdrop-blur-sm" style={{ '--tw-border-opacity': 1 } as React.CSSProperties}>
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="flex items-center justify-center size-10 rounded-lg bg-neon-orange/10 border border-neon-orange/30">
+              <Clock className="size-5 text-neon-orange" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Próximo Vencimiento</p>
+              <p className="text-lg font-bold text-neon-orange font-mono">
+                {nextDueDate ? formatDate(nextDueDate) : '—'}
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* ── Empty State ── */}
+      {(!recurringPayments || recurringPayments.length === 0) ? (
+        <Card className="border-neon-cyan/10 bg-card/50 backdrop-blur-sm">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+            <Repeat className="size-10 mb-3 text-neon-cyan/30" />
+            <p className="text-lg font-medium">No hay pagos recurrentes</p>
+            <p className="text-sm mb-4">Agrega tus pagos recurrentes para no olvidar ninguna fecha</p>
             <Button
               onClick={openCreateRecurring}
               className="bg-neon-cyan/20 border border-neon-cyan/50 text-neon-cyan hover:bg-neon-cyan/30"
             >
-              <Plus className="size-4 mr-2" />
+              <Plus className="size-4" />
               Agregar Recurrente
             </Button>
           </CardContent>
         </Card>
       ) : (
-        /* Recurring Payments List */
-        <div className="space-y-3">
-          {recurringPayments.map((payment) => {
-            const isActive = payment.isActive
-            const categoryName = getCategoryName(payment.categoryId)
+        /* ── Table ── */
+        <Card className="border-neon-cyan/10 bg-card/50 backdrop-blur-sm">
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-neon-cyan/10 hover:bg-transparent">
+                  <TableHead className="text-neon-cyan/70">Nombre</TableHead>
+                  <TableHead className="text-neon-cyan/70 text-right">Monto</TableHead>
+                  <TableHead className="text-neon-cyan/70 hidden sm:table-cell">Intervalo</TableHead>
+                  <TableHead className="text-neon-cyan/70 hidden md:table-cell">Día de Pago</TableHead>
+                  <TableHead className="text-neon-cyan/70 hidden lg:table-cell">Próximo Vencimiento</TableHead>
+                  <TableHead className="text-neon-cyan/70 hidden lg:table-cell">Categoría</TableHead>
+                  <TableHead className="text-neon-cyan/70 hidden sm:table-cell">Estado</TableHead>
+                  <TableHead className="text-neon-cyan/70 text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {recurringPayments.map((payment) => {
+                  const isActive = payment.isActive
+                  const categoryInfo = getCategoryInfo(payment.categoryId)
 
-            return (
-              <Card
-                key={payment.id}
-                className={`transition-all ${
-                  isActive
-                    ? 'border-neon-cyan/20 hover:border-neon-cyan/40 hover:shadow-neon-blue'
-                    : 'border-muted/30 opacity-60'
-                }`}
-              >
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Repeat
-                        className={`size-5 ${
-                          isActive ? 'text-neon-cyan' : 'text-muted-foreground'
-                        }`}
-                      />
-                      <div>
-                        <CardTitle className="text-base text-foreground">
-                          {payment.name}
-                        </CardTitle>
-                        {categoryName && (
-                          <div className="flex items-center gap-1 text-xs text-muted-foreground mt-0.5">
-                            <Tag className="size-3" />
-                            <span>{categoryName}</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        className={
-                          isActive
-                            ? 'border-neon-green/50 text-neon-green bg-neon-green/10'
-                            : 'border-muted text-muted-foreground bg-muted/10'
-                        }
-                        variant="outline"
-                      >
-                        {isActive ? (
-                          <><Power className="size-3 mr-1" />Activo</>
+                  return (
+                    <TableRow
+                      key={payment.id}
+                      className={`border-neon-cyan/5 hover:bg-neon-cyan/5 transition-colors ${!isActive ? 'opacity-50' : ''}`}
+                    >
+                      {/* Nombre */}
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <Repeat className={`size-4 shrink-0 ${isActive ? 'text-neon-cyan' : 'text-muted-foreground'}`} />
+                          <span className="font-medium truncate max-w-[140px]">{payment.name}</span>
+                        </div>
+                      </TableCell>
+                      {/* Monto */}
+                      <TableCell className="text-right font-mono text-neon-cyan">
+                        {formatCurrency(payment.amount)}
+                      </TableCell>
+                      {/* Intervalo */}
+                      <TableCell className="hidden sm:table-cell">
+                        {getIntervalBadge(payment.interval)}
+                      </TableCell>
+                      {/* Día de Pago */}
+                      <TableCell className="hidden md:table-cell">
+                        <div className="flex items-center gap-1.5">
+                          <CalendarClock className="size-3 text-muted-foreground" />
+                          <span className="text-sm">Día {payment.dueDay}</span>
+                        </div>
+                      </TableCell>
+                      {/* Próximo Vencimiento */}
+                      <TableCell className="hidden lg:table-cell">
+                        <div className="flex items-center gap-1.5">
+                          <CalendarDays className="size-3 text-muted-foreground" />
+                          <span className="text-sm">{formatDate(payment.nextDueDate)}</span>
+                        </div>
+                      </TableCell>
+                      {/* Categoría */}
+                      <TableCell className="hidden lg:table-cell">
+                        {categoryInfo ? (
+                          <CategoryBadge name={categoryInfo.name} color={categoryInfo.color} />
                         ) : (
-                          <><PowerOff className="size-3 mr-1" />Inactivo</>
+                          <span className="text-xs text-muted-foreground">—</span>
                         )}
-                      </Badge>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => openEditRecurring(payment)}
-                        className="size-8 p-0 text-muted-foreground hover:text-neon-cyan"
-                      >
-                        <Pencil className="size-3.5" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => confirmDeleteRecurring(payment)}
-                        className="size-8 p-0 text-muted-foreground hover:text-neon-pink"
-                      >
-                        <Trash2 className="size-3.5" />
-                      </Button>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
-                    <div>
-                      <p className="text-muted-foreground text-xs mb-0.5">Monto</p>
-                      <p className="text-neon-cyan font-semibold">{formatCurrency(payment.amount)}</p>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground text-xs mb-0.5">Intervalo</p>
-                      {getIntervalBadge(payment.interval)}
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground text-xs mb-0.5">Día de Pago</p>
-                      <div className="flex items-center gap-1">
-                        <CalendarClock className="size-3 text-muted-foreground" />
-                        <span className="font-medium">Día {payment.dueDay}</span>
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-muted-foreground text-xs mb-0.5">Próximo Vencimiento</p>
-                      <div className="flex items-center gap-1">
-                        <CalendarDays className="size-3 text-muted-foreground" />
-                        <span className="font-medium">{formatDate(payment.nextDueDate)}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {payment.description && (
-                    <p className="text-xs text-muted-foreground mt-2">{payment.description}</p>
-                  )}
-
-                  {/* Pay button */}
-                  {isActive && (
-                    <div className="mt-3 pt-2 border-t border-border/50">
-                      <Button
-                        size="sm"
-                        onClick={() => openPayDialog(payment)}
-                        className="bg-neon-green/15 border border-neon-green/40 text-neon-green hover:bg-neon-green/25 text-xs"
-                      >
-                        <Banknote className="size-3 mr-1" />
-                        Pagar {formatCurrency(payment.amount)}
-                      </Button>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )
-          })}
-        </div>
+                      </TableCell>
+                      {/* Estado */}
+                      <TableCell className="hidden sm:table-cell">
+                        {isActive ? (
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                            style={{ backgroundColor: '#01ff8922', border: '1px solid #01ff8944', color: '#01ff89' }}
+                          >
+                            <Power className="size-3 mr-1" />
+                            Activo
+                          </span>
+                        ) : (
+                          <span
+                            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                            style={{ backgroundColor: '#6b728022', border: '1px solid #6b728044', color: '#6b7280' }}
+                          >
+                            <PowerOff className="size-3 mr-1" />
+                            Inactivo
+                          </span>
+                        )}
+                      </TableCell>
+                      {/* Acciones */}
+                      <TableCell className="text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {isActive && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 text-neon-green hover:text-neon-green hover:bg-neon-green/10"
+                              onClick={() => openPayDialog(payment)}
+                              title="Pagar"
+                            >
+                              <Banknote className="size-3.5" />
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 text-muted-foreground hover:text-neon-blue hover:bg-neon-blue/10"
+                            onClick={() => openEditRecurring(payment)}
+                            title="Editar"
+                          >
+                            <Pencil className="size-3.5" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 text-muted-foreground hover:text-neon-pink hover:bg-neon-pink/10"
+                            onClick={() => confirmDeleteRecurring(payment)}
+                            title="Eliminar"
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
 
       {/* ─── Create/Edit Recurring Dialog ─────────────────────────── */}

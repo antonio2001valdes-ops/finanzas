@@ -14,12 +14,14 @@ import {
   Receipt,
   CircleDollarSign,
   CalendarDays,
-  Hash,
-  StickyNote,
   Power,
   PowerOff,
   CheckCircle2,
   XCircle,
+  Banknote,
+  AlertTriangle,
+  Loader2,
+  StickyNote,
 } from 'lucide-react'
 
 import { serviceService, categoryService, useAsyncData } from '@/lib/data'
@@ -27,12 +29,19 @@ import { formatCurrency, formatDate } from '@/lib/finance-utils'
 import type { ServiceAccount, ServiceBill, ExpenseCategory } from '@/lib/db-client'
 
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { Card, CardContent } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 import {
   Select,
   SelectContent,
@@ -58,11 +67,20 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from '@/components/ui/collapsible'
+
+// ─── CategoryBadge ─────────────────────────────────────────────────
+
+function CategoryBadge({ name, color }: { name: string; color?: string }) {
+  const c = color || '#ff6b35'
+  return (
+    <span
+      className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+      style={{ backgroundColor: c + '22', border: `1px solid ${c}44`, color: c }}
+    >
+      {name}
+    </span>
+  )
+}
 
 // ─── Zod Schemas ────────────────────────────────────────────────────
 
@@ -86,6 +104,11 @@ const billSchema = z.object({
 
 type BillForm = z.infer<typeof billSchema>
 
+// ─── Theme Colors ────────────────────────────────────────────────────
+
+const ORANGE = '#ff6b35'
+const YELLOW = '#f9f002'
+
 // ─── Props ──────────────────────────────────────────────────────────
 
 interface ServicesPageProps {
@@ -101,7 +124,6 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
   const {
     data: accounts,
     loading: accountsLoading,
-    refetch: refetchAccounts,
   } = useAsyncData(() => serviceService.getAllAccounts(), [refreshKey])
 
   const {
@@ -198,22 +220,16 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
 
       if (editingAccount) {
         await serviceService.updateAccount(editingAccount.id, data)
-        toast.success('Servicio actualizado', {
-          description: `"${values.name}" fue actualizado correctamente.`,
-        })
+        toast.success('Servicio actualizado')
       } else {
         await serviceService.createAccount(data as Omit<ServiceAccount, 'id' | 'createdAt' | 'updatedAt'>)
-        toast.success('Servicio creado', {
-          description: `"${values.name}" fue creado correctamente.`,
-        })
+        toast.success('Servicio creado')
       }
 
       setAccountDialogOpen(false)
       refresh()
     } catch (err) {
-      toast.error('Error', {
-        description: err instanceof Error ? err.message : 'No se pudo guardar el servicio.',
-      })
+      toast.error(err instanceof Error ? err.message : 'No se pudo guardar el servicio.')
     }
   }
 
@@ -223,16 +239,12 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
     if (!deletingAccountId) return
     try {
       await serviceService.deleteAccount(deletingAccountId)
-      toast.success('Servicio eliminado', {
-        description: 'El servicio y sus facturas fueron eliminados.',
-      })
+      toast.success('Servicio eliminado')
       setDeleteDialogOpen(false)
       setDeletingAccountId(null)
       refresh()
     } catch (err) {
-      toast.error('Error', {
-        description: err instanceof Error ? err.message : 'No se pudo eliminar el servicio.',
-      })
+      toast.error(err instanceof Error ? err.message : 'No se pudo eliminar el servicio.')
     }
   }
 
@@ -267,16 +279,12 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
         dueDate: new Date(values.dueDate + 'T12:00:00').toISOString(),
         paid: false,
       })
-      toast.success('Factura creada', {
-        description: `Factura por ${formatCurrency(values.amount)} creada correctamente.`,
-      })
+      toast.success('Factura creada')
       setBillDialogOpen(false)
       setBillAccountId(null)
       refresh()
     } catch (err) {
-      toast.error('Error', {
-        description: err instanceof Error ? err.message : 'No se pudo crear la factura.',
-      })
+      toast.error(err instanceof Error ? err.message : 'No se pudo crear la factura.')
     }
   }
 
@@ -285,56 +293,59 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
   const handlePayBill = async (billId: string) => {
     try {
       await serviceService.payBill(billId)
-      toast.success('Factura pagada', {
-        description: 'Se registró el pago y el gasto correspondiente.',
-      })
+      toast.success('Factura pagada')
       refresh()
     } catch (err) {
-      toast.error('Error', {
-        description: err instanceof Error ? err.message : 'No se pudo pagar la factura.',
-      })
+      toast.error(err instanceof Error ? err.message : 'No se pudo pagar la factura.')
     }
   }
 
   const handleUnpayBill = async (billId: string) => {
     try {
       await serviceService.unpayBill(billId)
-      toast.success('Pago anulado', {
-        description: 'Se eliminó el gasto asociado y se marcó como impaga.',
-      })
+      toast.success('Pago anulado')
       refresh()
     } catch (err) {
-      toast.error('Error', {
-        description: err instanceof Error ? err.message : 'No se pudo anular el pago.',
-      })
+      toast.error(err instanceof Error ? err.message : 'No se pudo anular el pago.')
     }
   }
 
   // ─── Category name lookup ───────────────────────────────────────
 
-  const getCategoryName = (categoryId?: string) => {
+  const getCategoryInfo = (categoryId?: string) => {
     if (!categoryId || !expenseCategories) return null
     const cat = expenseCategories.find((c) => c.id === categoryId)
-    return cat?.name ?? null
+    return cat ? { name: cat.name, color: cat.color } : null
   }
+
+  // ─── Computed summary ────────────────────────────────────────────
+
+  const activeAccounts = accounts?.filter((a) => a.isActive) ?? []
+  const totalServices = activeAccounts.reduce((sum, a) => sum + a.amount, 0)
 
   // ─── Loading ────────────────────────────────────────────────────
 
   if (accountsLoading) {
     return (
-      <div className="page-enter p-6 space-y-4">
+      <div className="page-enter p-4 md:p-6 space-y-4">
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-bold text-neon-yellow">Servicios</h1>
+          <h1 className="text-2xl font-bold text-neon-orange">Servicios</h1>
         </div>
-        {[1, 2, 3].map((i) => (
-          <Card key={i} className="border-neon-yellow/10 animate-pulse">
-            <CardContent className="p-6">
-              <div className="h-4 bg-muted rounded w-1/3 mb-3" />
-              <div className="h-3 bg-muted rounded w-1/2 mb-2" />
-              <div className="h-3 bg-muted rounded w-1/4" />
-            </CardContent>
-          </Card>
-        ))}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {[1, 2, 3].map((i) => (
+            <Card key={i} className="border-neon-orange/20 animate-pulse">
+              <CardContent className="p-4">
+                <div className="h-4 bg-muted rounded w-1/2 mb-3" />
+                <div className="h-6 bg-muted rounded w-2/3" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+        <Card className="border-neon-orange/10 animate-pulse">
+          <CardContent className="p-6">
+            <div className="h-40 bg-muted rounded" />
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -342,45 +353,69 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
   // ─── Render ─────────────────────────────────────────────────────
 
   return (
-    <div className="page-enter p-4 sm:p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <div className="page-enter p-4 md:p-6 space-y-4 overflow-auto">
+      {/* ── Header ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <div className="flex items-center gap-3">
-          <div className="flex items-center justify-center size-10 rounded-lg border border-neon-yellow/30 bg-neon-yellow/10">
-            <Receipt className="size-5 text-neon-yellow" />
+          <div className="flex items-center justify-center size-10 rounded-lg border border-neon-orange/30 bg-neon-orange/10">
+            <Receipt className="size-5 text-neon-orange" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-neon-yellow">Servicios</h1>
-            <p className="text-sm text-muted-foreground">
-              Gestiona tus cuentas de servicios y facturas
-            </p>
+            <h1 className="text-2xl font-bold" style={{ color: ORANGE, textShadow: `0 0 20px ${ORANGE}44` }}>
+              Servicios
+            </h1>
+            <p className="text-sm text-muted-foreground">Gestiona tus cuentas de servicios y facturas</p>
           </div>
         </div>
         <Button
           onClick={openCreateAccount}
-          className="bg-neon-yellow text-black hover:bg-neon-yellow/80 shadow-neon-yellow hover:shadow-neon-yellow font-semibold"
-          style={{ '--tw-shadow-color': 'rgba(249, 240, 2, 0.3)' } as React.CSSProperties}
+          className="bg-neon-orange/20 border border-neon-orange/50 text-neon-orange hover:bg-neon-orange/30 hover:shadow-[0_0_15px_rgba(255,107,53,0.3)] transition-all"
         >
           <Plus className="size-4" />
           Nuevo Servicio
         </Button>
       </div>
 
-      {/* Empty State */}
-      {!accounts || accounts.length === 0 ? (
-        <Card className="border-neon-yellow/10">
-          <CardContent className="flex flex-col items-center justify-center py-16 text-center">
-            <div className="size-16 rounded-full border border-neon-yellow/20 bg-neon-yellow/5 flex items-center justify-center mb-4">
-              <Receipt className="size-8 text-neon-yellow/50" />
+      {/* ── Summary Cards ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Total Servicios */}
+        <Card className="border-neon-orange/20 bg-card/50 backdrop-blur-sm">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="flex items-center justify-center size-10 rounded-lg bg-neon-orange/10 border border-neon-orange/30">
+              <CircleDollarSign className="size-5 text-neon-orange" />
             </div>
-            <h3 className="text-lg font-semibold mb-1">Sin servicios registrados</h3>
-            <p className="text-sm text-muted-foreground max-w-sm mb-4">
-              Agrega tus cuentas de servicios como electricidad, agua, internet, teléfono y gestiona sus facturas mensuales.
-            </p>
+            <div>
+              <p className="text-xs text-muted-foreground">Total Servicios</p>
+              <p className="text-lg font-bold text-neon-orange font-mono">{formatCurrency(totalServices)}</p>
+            </div>
+          </CardContent>
+        </Card>
+        {/* Pagadas */}
+        <ServiceBillSummaryCard
+          accounts={accounts}
+          expenseCategories={expenseCategories}
+          refreshKey={refreshKey}
+          type="paid"
+        />
+        {/* Pendientes */}
+        <ServiceBillSummaryCard
+          accounts={accounts}
+          expenseCategories={expenseCategories}
+          refreshKey={refreshKey}
+          type="unpaid"
+        />
+      </div>
+
+      {/* ── Empty State ── */}
+      {(!accounts || accounts.length === 0) ? (
+        <Card className="border-neon-orange/10 bg-card/50 backdrop-blur-sm">
+          <CardContent className="flex flex-col items-center justify-center py-16 text-muted-foreground">
+            <Receipt className="size-10 mb-3 text-neon-orange/30" />
+            <p className="text-lg font-medium">Sin servicios registrados</p>
+            <p className="text-sm mb-4">Agrega tus cuentas de servicios como electricidad, agua, internet</p>
             <Button
               onClick={openCreateAccount}
-              variant="outline"
-              className="border-neon-yellow/30 text-neon-yellow hover:bg-neon-yellow/10"
+              className="bg-neon-orange/20 border border-neon-orange/50 text-neon-orange hover:bg-neon-orange/30"
             >
               <Plus className="size-4" />
               Agregar Primer Servicio
@@ -388,34 +423,160 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
           </CardContent>
         </Card>
       ) : (
-        /* Service Accounts List */
-        <div className="space-y-4">
-          {accounts.map((account) => (
-            <ServiceAccountCard
-              key={account.id}
-              account={account}
-              isExpanded={expandedAccounts.has(account.id)}
-              onToggleExpand={() => toggleExpand(account.id)}
-              onEdit={() => openEditAccount(account)}
-              onDelete={() => {
-                setDeletingAccountId(account.id)
-                setDeleteDialogOpen(true)
-              }}
-              onAddBill={() => openCreateBill(account.id)}
-              onPayBill={handlePayBill}
-              onUnpayBill={handleUnpayBill}
-              getCategoryName={getCategoryName}
-              refreshKey={refreshKey}
-            />
-          ))}
-        </div>
+        /* ── Table ── */
+        <Card className="border-neon-orange/10 bg-card/50 backdrop-blur-sm">
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow className="border-neon-orange/10 hover:bg-transparent">
+                  <TableHead className="text-neon-orange/70">Nombre</TableHead>
+                  <TableHead className="text-neon-orange/70 hidden sm:table-cell">Proveedor</TableHead>
+                  <TableHead className="text-neon-orange/70 text-right">Monto</TableHead>
+                  <TableHead className="text-neon-orange/70 hidden md:table-cell">Día de Pago</TableHead>
+                  <TableHead className="text-neon-orange/70 hidden lg:table-cell">Categoría</TableHead>
+                  <TableHead className="text-neon-orange/70 hidden sm:table-cell">Estado</TableHead>
+                  <TableHead className="text-neon-orange/70 text-right">Acciones</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {accounts.map((account) => {
+                  const isExpanded = expandedAccounts.has(account.id)
+                  const categoryInfo = getCategoryInfo(account.categoryId)
+                  const isActive = account.isActive
+
+                  return (
+                    <>
+                      <TableRow
+                        key={account.id}
+                        className={`border-neon-orange/5 hover:bg-neon-orange/5 transition-colors ${!isActive ? 'opacity-50' : ''}`}
+                      >
+                        {/* Nombre */}
+                        <TableCell>
+                          <div className="flex items-center gap-2">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-6 p-0 text-muted-foreground hover:text-neon-orange"
+                              onClick={() => toggleExpand(account.id)}
+                            >
+                              {isExpanded ? <ChevronDown className="size-3.5" /> : <ChevronRight className="size-3.5" />}
+                            </Button>
+                            <Receipt className="size-4 text-neon-orange shrink-0" />
+                            <span className="font-medium truncate max-w-[130px]">{account.name}</span>
+                          </div>
+                        </TableCell>
+                        {/* Proveedor */}
+                        <TableCell className="hidden sm:table-cell text-sm text-muted-foreground">
+                          {account.provider}
+                        </TableCell>
+                        {/* Monto */}
+                        <TableCell className="text-right font-mono text-neon-orange">
+                          {formatCurrency(account.amount)}
+                        </TableCell>
+                        {/* Día de Pago */}
+                        <TableCell className="hidden md:table-cell">
+                          <div className="flex items-center gap-1.5">
+                            <CalendarDays className="size-3 text-muted-foreground" />
+                            <span className="text-sm">{account.dueDay ? `Día ${account.dueDay}` : '—'}</span>
+                          </div>
+                        </TableCell>
+                        {/* Categoría */}
+                        <TableCell className="hidden lg:table-cell">
+                          {categoryInfo ? (
+                            <CategoryBadge name={categoryInfo.name} color={categoryInfo.color} />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        {/* Estado */}
+                        <TableCell className="hidden sm:table-cell">
+                          {isActive ? (
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                              style={{ backgroundColor: '#01ff8922', border: '1px solid #01ff8944', color: '#01ff89' }}
+                            >
+                              <Power className="size-3 mr-1" />
+                              Activo
+                            </span>
+                          ) : (
+                            <span
+                              className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                              style={{ backgroundColor: '#6b728022', border: '1px solid #6b728044', color: '#6b7280' }}
+                            >
+                              <PowerOff className="size-3 mr-1" />
+                              Inactivo
+                            </span>
+                          )}
+                        </TableCell>
+                        {/* Acciones */}
+                        <TableCell className="text-right">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 text-muted-foreground hover:text-neon-blue hover:bg-neon-blue/10"
+                              onClick={() => openEditAccount(account)}
+                              title="Editar"
+                            >
+                              <Pencil className="size-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 text-muted-foreground hover:text-neon-pink hover:bg-neon-pink/10"
+                              onClick={() => {
+                                setDeletingAccountId(account.id)
+                                setDeleteDialogOpen(true)
+                              }}
+                              title="Eliminar"
+                            >
+                              <Trash2 className="size-3.5" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+
+                      {/* Expanded Bills Sub-Table */}
+                      {isExpanded && (
+                        <TableRow key={`${account.id}-bills`} className="border-neon-orange/5">
+                          <TableCell colSpan={7} className="bg-muted/20 p-0">
+                            <div className="p-3">
+                              <div className="flex items-center justify-between mb-2">
+                                <h4 className="text-sm font-medium text-muted-foreground">Facturas</h4>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="border-neon-orange/20 text-neon-orange hover:bg-neon-orange/10 text-xs h-7"
+                                  onClick={() => openCreateBill(account.id)}
+                                >
+                                  <Plus className="size-3" />
+                                  Nueva Factura
+                                </Button>
+                              </div>
+                              <BillsSubTable
+                                accountId={account.id}
+                                onPayBill={handlePayBill}
+                                onUnpayBill={handleUnpayBill}
+                                refreshKey={refreshKey}
+                              />
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
 
       {/* ── Create/Edit Account Dialog ─────────────────────────────── */}
       <Dialog open={accountDialogOpen} onOpenChange={setAccountDialogOpen}>
-        <DialogContent className="border-neon-yellow/20 sm:max-w-lg">
+        <DialogContent className="border-neon-orange/20 sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-neon-yellow">
+            <DialogTitle className="text-neon-orange">
               {editingAccount ? 'Editar Servicio' : 'Nuevo Servicio'}
             </DialogTitle>
             <DialogDescription>
@@ -432,7 +593,7 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
               <Input
                 id="svc-name"
                 placeholder="Ej: Electricidad, Internet..."
-                className="border-neon-yellow/20 focus:border-neon-yellow/50"
+                className="border-neon-orange/20 focus:border-neon-orange/50"
                 {...accountForm.register('name')}
               />
               {accountForm.formState.errors.name && (
@@ -448,7 +609,7 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
               <Input
                 id="svc-provider"
                 placeholder="Ej: CGE, Movistar..."
-                className="border-neon-yellow/20 focus:border-neon-yellow/50"
+                className="border-neon-orange/20 focus:border-neon-orange/50"
                 {...accountForm.register('provider')}
               />
               {accountForm.formState.errors.provider && (
@@ -466,7 +627,7 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
               <Input
                 id="svc-account-number"
                 placeholder="Número de cliente o cuenta"
-                className="border-neon-yellow/20 focus:border-neon-yellow/50"
+                className="border-neon-orange/20 focus:border-neon-orange/50"
                 {...accountForm.register('accountNumber')}
               />
             </div>
@@ -482,7 +643,7 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
                     accountForm.setValue('categoryId', val === '__none__' ? '' : val)
                   }}
                 >
-                  <SelectTrigger className="w-full border-neon-yellow/20 focus:border-neon-yellow/50">
+                  <SelectTrigger className="w-full border-neon-orange/20 focus:border-neon-orange/50">
                     <SelectValue placeholder="Sin categoría" />
                   </SelectTrigger>
                   <SelectContent>
@@ -504,7 +665,7 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
                   type="number"
                   min={0}
                   placeholder="$0"
-                  className="border-neon-yellow/20 focus:border-neon-yellow/50"
+                  className="border-neon-orange/20 focus:border-neon-orange/50"
                   {...accountForm.register('amount', { valueAsNumber: true })}
                 />
                 {accountForm.formState.errors.amount && (
@@ -528,7 +689,7 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
                   min={1}
                   max={31}
                   placeholder="Ej: 10"
-                  className="border-neon-yellow/20 focus:border-neon-yellow/50"
+                  className="border-neon-orange/20 focus:border-neon-orange/50"
                   {...accountForm.register('dueDay', { valueAsNumber: true })}
                 />
                 {accountForm.formState.errors.dueDay && (
@@ -570,7 +731,7 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
                 id="svc-notes"
                 placeholder="Notas adicionales..."
                 rows={2}
-                className="border-neon-yellow/20 focus:border-neon-yellow/50"
+                className="border-neon-orange/20 focus:border-neon-orange/50"
                 {...accountForm.register('notes')}
               />
             </div>
@@ -585,7 +746,7 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
               </Button>
               <Button
                 type="submit"
-                className="bg-neon-yellow text-black hover:bg-neon-yellow/80 font-semibold"
+                className="bg-neon-orange/20 border border-neon-orange/50 text-neon-orange hover:bg-neon-orange/30"
               >
                 {editingAccount ? 'Guardar Cambios' : 'Crear Servicio'}
               </Button>
@@ -596,9 +757,9 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
 
       {/* ── Create Bill Dialog ─────────────────────────────────────── */}
       <Dialog open={billDialogOpen} onOpenChange={setBillDialogOpen}>
-        <DialogContent className="border-neon-yellow/20 sm:max-w-md">
+        <DialogContent className="border-neon-orange/20 sm:max-w-md">
           <DialogHeader>
-            <DialogTitle className="text-neon-yellow">Nueva Factura</DialogTitle>
+            <DialogTitle className="text-neon-orange">Nueva Factura</DialogTitle>
             <DialogDescription>
               Ingresa los datos de la factura para este servicio.
             </DialogDescription>
@@ -613,7 +774,7 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
                 type="number"
                 min={1}
                 placeholder="$0"
-                className="border-neon-yellow/20 focus:border-neon-yellow/50"
+                className="border-neon-orange/20 focus:border-neon-orange/50"
                 {...billForm.register('amount', { valueAsNumber: true })}
               />
               {billForm.formState.errors.amount && (
@@ -629,7 +790,7 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
               <Input
                 id="bill-due-date"
                 type="date"
-                className="border-neon-yellow/20 focus:border-neon-yellow/50"
+                className="border-neon-orange/20 focus:border-neon-orange/50"
                 {...billForm.register('dueDate')}
               />
               {billForm.formState.errors.dueDate && (
@@ -649,7 +810,7 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
               </Button>
               <Button
                 type="submit"
-                className="bg-neon-yellow text-black hover:bg-neon-yellow/80 font-semibold"
+                className="bg-neon-orange/20 border border-neon-orange/50 text-neon-orange hover:bg-neon-orange/30"
               >
                 Crear Factura
               </Button>
@@ -671,7 +832,7 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
             <AlertDialogCancel>Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={confirmDeleteAccount}
-              className="bg-destructive text-white hover:bg-destructive/90"
+              className="bg-neon-pink/20 border border-neon-pink/50 text-neon-pink hover:bg-neon-pink/30"
             >
               Eliminar
             </AlertDialogAction>
@@ -682,163 +843,72 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
   )
 }
 
-// ─── Service Account Card Component ────────────────────────────────
+// ─── Bill Summary Card ────────────────────────────────────────────
 
-interface ServiceAccountCardProps {
-  account: ServiceAccount
-  isExpanded: boolean
-  onToggleExpand: () => void
-  onEdit: () => void
-  onDelete: () => void
-  onAddBill: () => void
-  onPayBill: (billId: string) => void
-  onUnpayBill: (billId: string) => void
-  getCategoryName: (categoryId?: string) => string | null
-  refreshKey: number
-}
-
-function ServiceAccountCard({
-  account,
-  isExpanded,
-  onToggleExpand,
-  onEdit,
-  onDelete,
-  onAddBill,
-  onPayBill,
-  onUnpayBill,
-  getCategoryName,
+function ServiceBillSummaryCard({
+  accounts,
+  expenseCategories,
   refreshKey,
-}: ServiceAccountCardProps) {
-  const categoryName = getCategoryName(account.categoryId)
+  type,
+}: {
+  accounts?: ServiceAccount[]
+  expenseCategories?: ExpenseCategory[]
+  refreshKey: number
+  type: 'paid' | 'unpaid'
+}) {
+  const [count, setCount] = useState(0)
+
+  useAsyncData(async () => {
+    if (!accounts || accounts.length === 0) {
+      setCount(0)
+      return null
+    }
+    let total = 0
+    for (const acc of accounts) {
+      const bills = await serviceService.getBills(acc.id)
+      for (const bill of bills) {
+        if (type === 'paid' && bill.paid) total++
+        if (type === 'unpaid' && !bill.paid) total++
+      }
+    }
+    setCount(total)
+    return null
+  }, [refreshKey, accounts, type])
+
+  const isPaid = type === 'paid'
+  const color = isPaid ? '#01ff89' : '#ff2a6d'
+  const label = isPaid ? 'Pagadas' : 'Pendientes'
+  const Icon = isPaid ? CheckCircle2 : XCircle
+  const borderColor = isPaid ? 'border-neon-green/20' : 'border-neon-pink/20'
+  const iconBg = isPaid ? 'bg-neon-green/10 border-neon-green/30' : 'bg-neon-pink/10 border-neon-pink/30'
 
   return (
-    <Collapsible open={isExpanded} onOpenChange={onToggleExpand}>
-      <Card className="border-neon-yellow/15 hover:border-neon-yellow/30 transition-colors">
-        <CardHeader className="pb-0">
-          <div className="flex items-start justify-between gap-3 flex-wrap">
-            <div className="flex items-start gap-3 min-w-0">
-              <CollapsibleTrigger asChild>
-                <button className="mt-0.5 text-muted-foreground hover:text-neon-yellow transition-colors shrink-0 cursor-pointer">
-                  {isExpanded ? (
-                    <ChevronDown className="size-5" />
-                  ) : (
-                    <ChevronRight className="size-5" />
-                  )}
-                </button>
-              </CollapsibleTrigger>
-
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <CardTitle className="text-base text-foreground truncate">
-                    {account.name}
-                  </CardTitle>
-                  <Badge
-                    variant="outline"
-                    className={
-                      account.isActive
-                        ? 'border-neon-green/40 text-neon-green bg-neon-green/10'
-                        : 'border-neon-pink/40 text-neon-pink bg-neon-pink/10'
-                    }
-                  >
-                    {account.isActive ? 'Activo' : 'Inactivo'}
-                  </Badge>
-                  {categoryName && (
-                    <Badge variant="secondary" className="text-xs">
-                      {categoryName}
-                    </Badge>
-                  )}
-                </div>
-                <CardDescription className="mt-1 flex items-center gap-3 flex-wrap">
-                  <span className="flex items-center gap-1">
-                    <CircleDollarSign className="size-3" />
-                    {account.provider}
-                  </span>
-                  {account.accountNumber && (
-                    <span className="flex items-center gap-1">
-                      <Hash className="size-3" />
-                      {account.accountNumber}
-                    </span>
-                  )}
-                </CardDescription>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <div className="text-right mr-2">
-                <div className="text-lg font-bold text-neon-yellow">
-                  {formatCurrency(account.amount)}
-                </div>
-                {account.dueDay && (
-                  <div className="text-xs text-muted-foreground flex items-center justify-end gap-1">
-                    <CalendarDays className="size-3" />
-                    Vence el {account.dueDay}
-                  </div>
-                )}
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8 text-muted-foreground hover:text-neon-blue"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onEdit()
-                }}
-              >
-                <Pencil className="size-4" />
-              </Button>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-8 text-muted-foreground hover:text-neon-pink"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onDelete()
-                }}
-              >
-                <Trash2 className="size-4" />
-              </Button>
-            </div>
-          </div>
-        </CardHeader>
-
-        {/* Notes */}
-        {account.notes && (
-          <CardContent className="pb-0 pt-2">
-            <div className="flex items-start gap-2 text-xs text-muted-foreground bg-muted/30 rounded-md p-2">
-              <StickyNote className="size-3 mt-0.5 shrink-0" />
-              <span>{account.notes}</span>
-            </div>
-          </CardContent>
-        )}
-
-        {/* Bills Section */}
-        <CollapsibleContent>
-          <CardContent className="pt-2">
-            <BillsList
-              accountId={account.id}
-              onPayBill={onPayBill}
-              onUnpayBill={onUnpayBill}
-              onAddBill={onAddBill}
-              refreshKey={refreshKey}
-            />
-          </CardContent>
-        </CollapsibleContent>
-      </Card>
-    </Collapsible>
+    <Card className={`${borderColor} bg-card/50 backdrop-blur-sm`}>
+      <CardContent className="p-4 flex items-center gap-3">
+        <div className={`flex items-center justify-center size-10 rounded-lg ${iconBg} border`}>
+          <Icon className="size-5" style={{ color }} />
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">{label}</p>
+          <p className="text-lg font-bold font-mono" style={{ color }}>
+            {count}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
-// ─── Bills List Component ──────────────────────────────────────────
+// ─── Bills Sub-Table Component ────────────────────────────────────
 
-interface BillsListProps {
+interface BillsSubTableProps {
   accountId: string
   onPayBill: (billId: string) => void
   onUnpayBill: (billId: string) => void
-  onAddBill: () => void
   refreshKey: number
 }
 
-function BillsList({ accountId, onPayBill, onUnpayBill, onAddBill, refreshKey }: BillsListProps) {
+function BillsSubTable({ accountId, onPayBill, onUnpayBill, refreshKey }: BillsSubTableProps) {
   const { data: bills, loading: billsLoading } = useAsyncData(
     () => serviceService.getBills(accountId),
     [accountId, refreshKey]
@@ -846,8 +916,7 @@ function BillsList({ accountId, onPayBill, onUnpayBill, onAddBill, refreshKey }:
 
   if (billsLoading) {
     return (
-      <div className="space-y-2 pt-2">
-        <div className="h-3 bg-muted rounded w-1/4" />
+      <div className="space-y-2 py-2">
         {[1, 2].map((i) => (
           <div key={i} className="h-8 bg-muted/50 rounded animate-pulse" />
         ))}
@@ -855,112 +924,86 @@ function BillsList({ accountId, onPayBill, onUnpayBill, onAddBill, refreshKey }:
     )
   }
 
+  if (!bills || bills.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground text-center py-4 bg-muted/20 rounded-md">
+        Sin facturas registradas
+      </p>
+    )
+  }
+
   return (
-    <div className="space-y-3 pt-2">
-      <div className="flex items-center justify-between">
-        <h4 className="text-sm font-medium text-muted-foreground">Facturas</h4>
-        <Button
-          variant="outline"
-          size="sm"
-          className="border-neon-yellow/20 text-neon-yellow hover:bg-neon-yellow/10 text-xs h-7"
-          onClick={onAddBill}
-        >
-          <Plus className="size-3" />
-          Nueva Factura
-        </Button>
-      </div>
-
-      {!bills || bills.length === 0 ? (
-        <p className="text-xs text-muted-foreground text-center py-4 bg-muted/20 rounded-md">
-          Sin facturas registradas
-        </p>
-      ) : (
-        <div className="rounded-md border border-neon-yellow/10 overflow-hidden">
-          {/* Table Header */}
-          <div className="grid grid-cols-[1fr_auto_auto_auto] sm:grid-cols-[1fr_auto_auto_auto] gap-2 px-3 py-2 bg-muted/30 text-xs font-medium text-muted-foreground">
-            <span>Vencimiento</span>
-            <span className="text-right">Monto</span>
-            <span className="text-center">Estado</span>
-            <span className="text-right">Acción</span>
-          </div>
-
-          {/* Table Body */}
-          <div className="divide-y divide-neon-yellow/5 max-h-96 overflow-y-auto cyber-scrollbar">
-            {bills.map((bill) => (
-              <BillRow
-                key={bill.id}
-                bill={bill}
-                onPay={() => onPayBill(bill.id)}
-                onUnpay={() => onUnpayBill(bill.id)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ─── Bill Row Component ────────────────────────────────────────────
-
-interface BillRowProps {
-  bill: ServiceBill
-  onPay: () => void
-  onUnpay: () => void
-}
-
-function BillRow({ bill, onPay, onUnpay }: BillRowProps) {
-  return (
-    <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-3 py-2 text-sm items-center hover:bg-muted/20 transition-colors">
-      {/* Due Date */}
-      <div className="flex flex-col">
-        <span className="text-xs">{formatDate(bill.dueDate)}</span>
-        {bill.paid && bill.paidDate && (
-          <span className="text-[10px] text-muted-foreground">
-            Pagado: {formatDate(bill.paidDate)}
-          </span>
-        )}
-      </div>
-
-      {/* Amount */}
-      <span className="text-right font-medium text-foreground">
-        {formatCurrency(bill.amount)}
-      </span>
-
-      {/* Status */}
-      {bill.paid ? (
-        <Badge className="border-neon-green/40 text-neon-green bg-neon-green/10 text-[10px] px-1.5 py-0">
-          <CheckCircle2 className="size-3 mr-0.5" />
-          Pagada
-        </Badge>
-      ) : (
-        <Badge className="border-neon-pink/40 text-neon-pink bg-neon-pink/10 text-[10px] px-1.5 py-0">
-          <XCircle className="size-3 mr-0.5" />
-          Impaga
-        </Badge>
-      )}
-
-      {/* Action */}
-      <div className="text-right">
-        {bill.paid ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs text-neon-pink hover:text-neon-pink hover:bg-neon-pink/10"
-            onClick={onUnpay}
-          >
-            Anular pago
-          </Button>
-        ) : (
-          <Button
-            size="sm"
-            className="h-7 text-xs bg-neon-green/20 text-neon-green hover:bg-neon-green/30 border border-neon-green/30"
-            onClick={onPay}
-          >
-            Pagar
-          </Button>
-        )}
-      </div>
+    <div className="rounded-md border border-neon-orange/10 overflow-hidden">
+      <Table>
+        <TableHeader>
+          <TableRow className="border-neon-orange/10 hover:bg-transparent">
+            <TableHead className="text-neon-orange/60 text-xs h-8">Fecha Vencimiento</TableHead>
+            <TableHead className="text-neon-orange/60 text-xs h-8 text-right">Monto</TableHead>
+            <TableHead className="text-neon-orange/60 text-xs h-8 text-center">Estado</TableHead>
+            <TableHead className="text-neon-orange/60 text-xs h-8 hidden sm:table-cell">Fecha Pago</TableHead>
+            <TableHead className="text-neon-orange/60 text-xs h-8 text-right">Acción</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {bills.map((bill) => (
+            <TableRow key={bill.id} className="border-neon-orange/5 hover:bg-neon-orange/5">
+              {/* Fecha Vencimiento */}
+              <TableCell className="text-xs py-1.5">
+                {formatDate(bill.dueDate)}
+              </TableCell>
+              {/* Monto */}
+              <TableCell className="text-xs py-1.5 text-right font-mono font-medium">
+                {formatCurrency(bill.amount)}
+              </TableCell>
+              {/* Estado */}
+              <TableCell className="text-xs py-1.5 text-center">
+                {bill.paid ? (
+                  <span
+                    className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                    style={{ backgroundColor: '#01ff8922', border: '1px solid #01ff8944', color: '#01ff89' }}
+                  >
+                    <CheckCircle2 className="size-3 mr-0.5" />
+                    Pagada
+                  </span>
+                ) : (
+                  <span
+                    className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                    style={{ backgroundColor: '#ff2a6d22', border: '1px solid #ff2a6d44', color: '#ff2a6d' }}
+                  >
+                    <XCircle className="size-3 mr-0.5" />
+                    Pendiente
+                  </span>
+                )}
+              </TableCell>
+              {/* Fecha Pago */}
+              <TableCell className="text-xs py-1.5 text-muted-foreground hidden sm:table-cell">
+                {bill.paid && bill.paidDate ? formatDate(bill.paidDate) : '—'}
+              </TableCell>
+              {/* Acción */}
+              <TableCell className="text-xs py-1.5 text-right">
+                {bill.paid ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-[10px] text-neon-pink hover:text-neon-pink hover:bg-neon-pink/10 px-2"
+                    onClick={() => onUnpayBill(bill.id)}
+                  >
+                    Anular
+                  </Button>
+                ) : (
+                  <Button
+                    size="sm"
+                    className="h-6 text-[10px] bg-neon-green/20 text-neon-green hover:bg-neon-green/30 border border-neon-green/30 px-2"
+                    onClick={() => onPayBill(bill.id)}
+                  >
+                    Pagar
+                  </Button>
+                )}
+              </TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   )
 }
