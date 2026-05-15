@@ -12,7 +12,7 @@ export { transferService } from './transfers';
 export { dashboardService } from './dashboard';
 export type { DashboardData } from './dashboard';
 export { searchService } from './search';
-export type { SearchResult } from './search';
+export type { SearchGroup, SearchMatch } from './search';
 export { backupService } from './backup';
 export { seedService } from './seed';
 export { categorizationRuleService } from './categorization-rules';
