@@ -560,16 +560,17 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
                         {/* Acciones */}
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
-                            {/* Calendar button - more visible */}
+                            {/* Calendar / Add Bill button */}
                             {isActive && (
                               <Button
                                 variant="outline"
-                                size="icon"
-                                className="size-7 border-neon-cyan/30 text-neon-cyan hover:bg-neon-cyan/15 hover:border-neon-cyan/50 hover:shadow-[0_0_8px_rgba(5,217,232,0.25)] transition-all"
+                                size="sm"
+                                className="h-7 gap-1 px-2 border-neon-cyan/30 text-neon-cyan hover:bg-neon-cyan/15 hover:border-neon-cyan/50 hover:shadow-[0_0_8px_rgba(5,217,232,0.25)] transition-all text-xs"
                                 onClick={() => openBillDialog(payment)}
                                 title="Agregar Factura"
                               >
                                 <CalendarDays className="size-3.5" />
+                                <span className="hidden xl:inline">Factura</span>
                               </Button>
                             )}
                             {isActive && (
