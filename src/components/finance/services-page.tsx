@@ -447,7 +447,12 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
       </div>
 
       {/* ── Summary Cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Total Servicios del Mes */}
+        <ServiceMonthTotalCard
+          accounts={accounts}
+          refreshKey={refreshKey}
+        />
         {/* Pagadas */}
         <ServiceBillSummaryCard
           accounts={accounts}
@@ -962,6 +967,57 @@ export function ServicesPage({ currentMonth, currentYear }: ServicesPageProps) {
   )
 }
 
+// ─── Month Total Card ─────────────────────────────────────────────
+
+function ServiceMonthTotalCard({
+  accounts,
+  refreshKey,
+}: {
+  accounts?: ServiceAccount[]
+  refreshKey: number
+}) {
+  const [totalAmount, setTotalAmount] = useState(0)
+
+  useAsyncData(async () => {
+    if (!accounts || accounts.length === 0) {
+      setTotalAmount(0)
+      return null
+    }
+    const now = new Date()
+    const currentMonth = now.getMonth()
+    const currentYear = now.getFullYear()
+    let total = 0
+    for (const acc of accounts) {
+      const bills = await serviceService.getBills(acc.id)
+      for (const bill of bills) {
+        // Only count bills from the current month
+        const billDate = new Date(bill.dueDate)
+        if (billDate.getMonth() === currentMonth && billDate.getFullYear() === currentYear) {
+          total += bill.amount
+        }
+      }
+    }
+    setTotalAmount(total)
+    return null
+  }, [refreshKey, accounts])
+
+  return (
+    <Card className="border-neon-orange/20 bg-card/50 backdrop-blur-sm">
+      <CardContent className="p-4 flex items-center gap-3">
+        <div className="flex items-center justify-center size-10 rounded-lg bg-neon-orange/10 border border-neon-orange/30">
+          <CircleDollarSign className="size-5 text-neon-orange" />
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground">Total Servicios Mes</p>
+          <p className="text-lg font-bold text-neon-orange font-mono">
+            {formatCurrency(totalAmount)}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
 // ─── Bill Summary Card ────────────────────────────────────────────
 
 function ServiceBillSummaryCard({
@@ -1146,6 +1202,35 @@ function BillsSubTable({ accountId, onPayBill, onUnpayBill, onEditBill, onDelete
               </TableCell>
             </TableRow>
           ))}
+          {/* Total row - sum of all paid bills (gasto hasta hoy) */}
+          {(() => {
+            const paidTotal = bills.filter((b) => b.paid).reduce((sum, b) => sum + b.amount, 0)
+            const allTotal = bills.reduce((sum, b) => sum + b.amount, 0)
+            return (
+              <TableRow className="border-neon-orange/20 bg-neon-orange/5 hover:bg-neon-orange/8">
+                <TableCell className="text-xs py-2 font-bold text-neon-orange">
+                  Total
+                </TableCell>
+                <TableCell className="text-xs py-2 text-right font-mono font-bold">
+                  <div className="flex flex-col items-end gap-0.5">
+                    {paidTotal > 0 && (
+                      <span className="text-neon-green">
+                        Pagado: {formatCurrency(paidTotal)}
+                      </span>
+                    )}
+                    <span className="text-neon-orange">
+                      Total: {formatCurrency(allTotal)}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-xs py-2 text-center text-muted-foreground">
+                  {bills.length} factura{bills.length !== 1 ? 's' : ''}
+                </TableCell>
+                <TableCell className="hidden sm:table-cell" />
+                <TableCell />
+              </TableRow>
+            )
+          })()}
         </TableBody>
       </Table>
     </div>
