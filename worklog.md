@@ -52,3 +52,28 @@ Stage Summary:
 - Sidebar is now cleaner: no calendar, no ZIP button, only navigation + export data
 - PDF generation creates a professional dark-themed monthly summary with all financial data
 - Build verified successfully (0 errors)
+
+---
+Task ID: 1
+Agent: Main
+Task: Recurrentes: quitar calendario, botón amarillo, botones individuales por servicio, totales, editar/eliminar pagos
+
+Work Log:
+- Read recurring-page.tsx (1124 lines) to understand current structure
+- Read recurring service and transaction service for data operations
+- Rewrote recurring-page.tsx with all requested changes:
+  1. Removed CalendarDays icon from "Factura" button, replaced with FileText icon
+  2. Changed button color from cyan to yellow (neon-yellow)
+  3. Replaced Select dropdown for service with individual buttons per service in bill dialog
+  4. Added 2 new summary cards: "Total Recurrentes Mes" and "Gastado hasta Hoy"
+  5. Added edit/delete buttons to PaymentHistorySubTable for each payment row
+  6. Added total row at bottom of payment history table
+  7. Added edit payment dialog with amount, date, description fields
+  8. Added delete payment confirmation dialog
+- Built successfully with `npx next build`
+- Committed and pushed to GitHub
+
+Stage Summary:
+- All 6 changes implemented and pushed
+- Build passes with no errors
+- Commit: 316e9c1
