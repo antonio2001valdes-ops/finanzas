@@ -77,3 +77,35 @@ Stage Summary:
 - All 6 changes implemented and pushed
 - Build passes with no errors
 - Commit: 316e9c1
+
+---
+Task ID: 2
+Agent: Main
+Task: Redesign search as a visual dialog with grouped results and navigation
+
+Work Log:
+- Read current SearchDialog (CommandDialog-based cmdk palette) in app-shell.tsx
+- Read search service (lib/data/search.ts) - basic flat results
+- Read navigation context and command UI component
+- Completely rewrote search service with new SearchGroup/SearchMatch types
+- Added search across: transactions, accounts, services, bills, debts, savings, recurring, categories (expense+income), budgets
+- Each result includes: page target, matched field label, amount, date, sublabel
+- Replaced CommandDialog with custom animated Dialog (framer-motion)
+- New dialog features:
+  - Input field with clear button and ESC hint
+  - When empty: navigation grid with all 10 sections (neon-colored icons)
+  - When searching: results grouped by section with color-coded headers
+  - Each result shows label, sublabel, amount, date, matched field
+  - Clicking any result or group header navigates to that section
+  - Animated backdrop and dialog entry/exit
+  - Spinner for loading state
+  - "No results" empty state
+  - Shows total result count and section count
+- Changed search button in header to cyan color scheme
+- Built and pushed successfully
+
+Stage Summary:
+- Search completely redesigned with visual dialog
+- Search now covers 10 entity types (was 6)
+- Clicking results navigates to the correct section
+- Commit: 5543107
