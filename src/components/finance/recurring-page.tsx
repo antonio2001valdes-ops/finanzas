@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useForm } from 'react-hook-form'
 import { z } from 'zod/v4'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -11,7 +11,6 @@ import {
   Trash2,
   Banknote,
   CalendarClock,
-  CalendarDays,
   ChevronDown,
   ChevronRight,
   Power,
@@ -21,9 +20,10 @@ import {
   AlertTriangle,
   FileText,
   History,
+  DollarSign,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { recurringService, categoryService, serviceService, accountService, useAsyncData } from '@/lib/data'
+import { recurringService, categoryService, serviceService, accountService, transactionService, useAsyncData } from '@/lib/data'
 import { formatCurrency, formatDate } from '@/lib/finance-utils'
 import type { RecurringPayment, ExpenseCategory, ServiceAccount, Account, Transaction } from '@/lib/db-client'
 import { Card, CardContent } from '@/components/ui/card'
@@ -115,6 +115,7 @@ type BillForm = z.infer<typeof billSchema>
 // ─── Theme Colors ────────────────────────────────────────────────────
 
 const CYAN = '#00fff5'
+const YELLOW = '#f9f002'
 
 // ─── Component ──────────────────────────────────────────────────────
 
@@ -265,7 +266,7 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
     setSelectedRecurringForBill(payment)
     billForm.reset({
       serviceAccountId: '',
-      amount: 0,
+      amount: payment.amount,
       dueDate: '',
     })
     setBillDialogOpen(true)
@@ -365,6 +366,33 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
   const activeRecurring = recurringPayments?.filter((r) => r.isActive) ?? []
   const activeCount = activeRecurring.length
 
+  // Total de recurrentes activos del mes
+  const totalRecurringMonth = useMemo(() => {
+    return activeRecurring.reduce((sum, r) => sum + r.amount, 0)
+  }, [activeRecurring])
+
+  // Gastado hasta hoy (pagos realizados este mes)
+  const [spentThisMonth, setSpentThisMonth] = useState(0)
+  useEffect(() => {
+    if (!recurringPayments || recurringPayments.length === 0) {
+      setSpentThisMonth(0)
+      return
+    }
+    const now = new Date()
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
+
+    Promise.all(
+      recurringPayments.map((r) => recurringService.getPaymentHistory(r.id))
+    ).then((allPayments) => {
+      const total = allPayments
+        .flat()
+        .filter((t) => t.date >= monthStart && t.date <= monthEnd)
+        .reduce((sum, t) => sum + t.amount, 0)
+      setSpentThisMonth(total)
+    })
+  }, [recurringPayments])
+
   // Next due date (earliest among active)
   const nextDueDate = activeRecurring.length > 0
     ? activeRecurring.reduce((earliest, r) => {
@@ -382,8 +410,8 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-neon-cyan">Pagos Recurrentes</h1>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => (
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
             <Card key={i} className="border-neon-cyan/20 animate-pulse">
               <CardContent className="p-4">
                 <div className="h-4 bg-muted rounded w-1/2 mb-3" />
@@ -426,7 +454,7 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
       </div>
 
       {/* ── Summary Cards ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Activos */}
         <Card className="border-neon-green/20 bg-card/50 backdrop-blur-sm">
           <CardContent className="p-4 flex items-center gap-3">
@@ -450,6 +478,30 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
               <p className="text-lg font-bold text-neon-orange font-mono">
                 {nextDueDate ? formatDate(nextDueDate) : '—'}
               </p>
+            </div>
+          </CardContent>
+        </Card>
+        {/* Total Recurrentes Mes */}
+        <Card className="border-neon-yellow/20 bg-card/50 backdrop-blur-sm">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="flex items-center justify-center size-10 rounded-lg bg-neon-yellow/10 border border-neon-yellow/30">
+              <DollarSign className="size-5 text-neon-yellow" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Total Recurrentes Mes</p>
+              <p className="text-lg font-bold text-neon-yellow font-mono">{formatCurrency(totalRecurringMonth)}</p>
+            </div>
+          </CardContent>
+        </Card>
+        {/* Gastado hasta Hoy */}
+        <Card className="border-neon-pink/20 bg-card/50 backdrop-blur-sm">
+          <CardContent className="p-4 flex items-center gap-3">
+            <div className="flex items-center justify-center size-10 rounded-lg bg-neon-pink/10 border border-neon-pink/30">
+              <Banknote className="size-5 text-neon-pink" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Gastado hasta Hoy</p>
+              <p className="text-lg font-bold text-neon-pink font-mono">{formatCurrency(spentThisMonth)}</p>
             </div>
           </CardContent>
         </Card>
@@ -560,16 +612,16 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
                         {/* Acciones */}
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
-                            {/* Calendar / Add Bill button */}
+                            {/* Factura button - YELLOW, no calendar icon */}
                             {isActive && (
                               <Button
                                 variant="outline"
                                 size="sm"
-                                className="h-7 gap-1 px-2 border-neon-cyan/30 text-neon-cyan hover:bg-neon-cyan/15 hover:border-neon-cyan/50 hover:shadow-[0_0_8px_rgba(5,217,232,0.25)] transition-all text-xs"
+                                className="h-7 gap-1 px-2 border-neon-yellow/30 text-neon-yellow hover:bg-neon-yellow/15 hover:border-neon-yellow/50 hover:shadow-[0_0_8px_rgba(249,240,2,0.25)] transition-all text-xs"
                                 onClick={() => openBillDialog(payment)}
                                 title="Agregar Factura"
                               >
-                                <CalendarDays className="size-3.5" />
+                                <FileText className="size-3.5" />
                                 <span className="hidden xl:inline">Factura</span>
                               </Button>
                             )}
@@ -619,8 +671,10 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
                               </div>
                               <PaymentHistorySubTable
                                 recurringId={payment.id}
+                                recurringAmount={payment.amount}
                                 accounts={accounts}
                                 refreshKey={expandedRows.size}
+                                onRefetch={refetch}
                               />
                             </div>
                           </TableCell>
@@ -827,7 +881,7 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
         </DialogContent>
       </Dialog>
 
-      {/* ─── Add Bill Dialog ─────────────────────────────────────── */}
+      {/* ─── Add Bill Dialog (individual service buttons) ─────────── */}
       <Dialog open={billDialogOpen} onOpenChange={setBillDialogOpen}>
         <DialogContent className="bg-card border-neon-yellow/20 max-h-[90vh] overflow-y-auto">
           <DialogHeader>
@@ -842,29 +896,40 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
           </DialogHeader>
 
           <form onSubmit={billForm.handleSubmit(onSubmitBill)} className="space-y-4">
-            {/* Servicio */}
+            {/* Servicio - Individual buttons instead of dropdown */}
             <div className="space-y-2">
               <Label>Servicio</Label>
-              <Select
-                value={billForm.watch('serviceAccountId') || ''}
-                onValueChange={(val) => billForm.setValue('serviceAccountId', val)}
-              >
-                <SelectTrigger className="border-neon-yellow/20 focus:border-neon-yellow/50 w-full">
-                  <SelectValue placeholder="Seleccionar servicio" />
-                </SelectTrigger>
-                <SelectContent>
-                  {serviceAccounts?.map((sa) => (
-                    <SelectItem key={sa.id} value={sa.id}>
-                      {sa.name} {sa.provider ? `- ${sa.provider}` : ''}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {(!serviceAccounts || serviceAccounts.length === 0) ? (
+                <p className="text-xs text-muted-foreground">No hay servicios registrados. Crea uno primero en la sección de Servicios.</p>
+              ) : (
+                <div className="grid grid-cols-2 gap-2">
+                  {serviceAccounts.map((sa) => {
+                    const isSelected = billForm.watch('serviceAccountId') === sa.id
+                    return (
+                      <Button
+                        key={sa.id}
+                        type="button"
+                        variant="outline"
+                        className={`h-auto py-2 px-3 justify-start text-left transition-all ${
+                          isSelected
+                            ? 'border-neon-yellow/60 bg-neon-yellow/15 text-neon-yellow shadow-[0_0_10px_rgba(249,240,2,0.2)]'
+                            : 'border-neon-yellow/20 text-muted-foreground hover:border-neon-yellow/40 hover:bg-neon-yellow/5 hover:text-neon-yellow/80'
+                        }`}
+                        onClick={() => billForm.setValue('serviceAccountId', sa.id)}
+                      >
+                        <div className="flex flex-col items-start gap-0.5">
+                          <span className="text-xs font-medium truncate max-w-full">{sa.name}</span>
+                          {sa.provider && (
+                            <span className="text-[10px] opacity-60 truncate max-w-full">{sa.provider}</span>
+                          )}
+                        </div>
+                      </Button>
+                    )
+                  })}
+                </div>
+              )}
               {billForm.formState.errors.serviceAccountId && (
                 <p className="text-xs text-destructive">{billForm.formState.errors.serviceAccountId.message}</p>
-              )}
-              {(!serviceAccounts || serviceAccounts.length === 0) && (
-                <p className="text-xs text-muted-foreground">No hay servicios registrados. Crea uno primero en la sección de Servicios.</p>
               )}
             </div>
 
@@ -888,7 +953,7 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
               <Label>Fecha de vencimiento</Label>
               <DatePickerField
                 {...billForm.register('dueDate')}
-                accentColor="#f9f002"
+                accentColor={YELLOW}
               />
               {billForm.formState.errors.dueDate && (
                 <p className="text-xs text-destructive">{billForm.formState.errors.dueDate.message}</p>
@@ -909,10 +974,8 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
                 disabled={false}
                 className="bg-neon-yellow/20 border border-neon-yellow/50 text-neon-yellow hover:bg-neon-yellow/30"
               >
-                <>
-                  <FileText className="size-4 mr-2" />
-                  Crear Factura
-                </>
+                <FileText className="size-4 mr-2" />
+                Crear Factura
               </Button>
             </DialogFooter>
           </form>
@@ -985,7 +1048,7 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
                     <div>
                       <p className="text-xs font-semibold text-neon-pink">Saldo insuficiente</p>
                       <p className="text-[10px] text-muted-foreground">
-                        Disponible: {formatCurrency(selectedAcct?.balance ?? 0)} • Necesitas: {formatCurrency(selectedRecurring?.amount ?? 0)}
+                        Disponible: {formatCurrency(selectedAcct?.balance ?? 0)} | Necesitas: {formatCurrency(selectedRecurring?.amount ?? 0)}
                       </p>
                     </div>
                   </div>
@@ -996,7 +1059,6 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
 
           <DialogFooter>
             <Button
-              type="button"
               variant="outline"
               onClick={() => setPayDialogOpen(false)}
             >
@@ -1043,17 +1105,79 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
 
 function PaymentHistorySubTable({
   recurringId,
+  recurringAmount,
   accounts,
   refreshKey,
+  onRefetch,
 }: {
   recurringId: string
+  recurringAmount: number
   accounts?: Account[]
   refreshKey: number
+  onRefetch: () => void
 }) {
-  const { data: payments, loading } = useAsyncData<Transaction[]>(
+  const { data: payments, loading, refetch } = useAsyncData<Transaction[]>(
     () => recurringService.getPaymentHistory(recurringId),
     [recurringId, refreshKey]
   )
+
+  // Edit payment dialog
+  const [editPaymentOpen, setEditPaymentOpen] = useState(false)
+  const [editingPayment, setEditingPayment] = useState<Transaction | null>(null)
+  const [editAmount, setEditAmount] = useState(0)
+  const [editDate, setEditDate] = useState('')
+  const [editDescription, setEditDescription] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  // Delete payment dialog
+  const [deletePaymentOpen, setDeletePaymentOpen] = useState(false)
+  const [deletingPayment, setDeletingPayment] = useState<Transaction | null>(null)
+
+  const openEditPayment = (tx: Transaction) => {
+    setEditingPayment(tx)
+    setEditAmount(tx.amount)
+    setEditDate(tx.date.split('T')[0])
+    setEditDescription(tx.description || '')
+    setEditPaymentOpen(true)
+  }
+
+  const onSaveEditPayment = async () => {
+    if (!editingPayment) return
+    setSaving(true)
+    try {
+      await transactionService.update(editingPayment.id, {
+        amount: editAmount,
+        date: editDate,
+        description: editDescription,
+      })
+      toast.success('Pago actualizado')
+      setEditPaymentOpen(false)
+      refetch()
+      onRefetch()
+    } catch {
+      toast.error('Error al actualizar el pago')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const confirmDeletePayment = (tx: Transaction) => {
+    setDeletingPayment(tx)
+    setDeletePaymentOpen(true)
+  }
+
+  const onDeletePayment = async () => {
+    if (!deletingPayment) return
+    try {
+      await transactionService.delete(deletingPayment.id)
+      toast.success('Pago eliminado')
+      setDeletePaymentOpen(false)
+      refetch()
+      onRefetch()
+    } catch {
+      toast.error('Error al eliminar el pago')
+    }
+  }
 
   if (loading) {
     return (
@@ -1079,46 +1203,165 @@ function PaymentHistorySubTable({
     return acct ? `${acct.icon} ${acct.name}` : '—'
   }
 
+  // Total de pagos
+  const totalPayments = payments.reduce((sum, tx) => sum + tx.amount, 0)
+
   return (
-    <div className="rounded-md border border-neon-cyan/10 overflow-hidden">
-      <Table>
-        <TableHeader>
-          <TableRow className="border-neon-cyan/10 hover:bg-transparent">
-            <TableHead className="text-neon-cyan/60 text-xs h-8">Fecha</TableHead>
-            <TableHead className="text-neon-cyan/60 text-xs h-8 text-right">Monto</TableHead>
-            <TableHead className="text-neon-cyan/60 text-xs h-8 hidden sm:table-cell">Cuenta</TableHead>
-            <TableHead className="text-neon-cyan/60 text-xs h-8 text-center">Estado</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {payments.map((tx) => (
-            <TableRow key={tx.id} className="border-neon-cyan/5 hover:bg-neon-cyan/5">
-              {/* Fecha */}
-              <TableCell className="text-xs py-1.5">
-                {formatDate(tx.date)}
-              </TableCell>
-              {/* Monto */}
-              <TableCell className="text-xs py-1.5 text-right font-mono font-medium text-neon-pink">
-                {formatCurrency(tx.amount)}
-              </TableCell>
-              {/* Cuenta */}
-              <TableCell className="text-xs py-1.5 text-muted-foreground hidden sm:table-cell">
-                {getAccountName(tx.accountId)}
-              </TableCell>
-              {/* Estado */}
-              <TableCell className="text-xs py-1.5 text-center">
-                <span
-                  className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium"
-                  style={{ backgroundColor: '#01ff8922', border: '1px solid #01ff8944', color: '#01ff89' }}
-                >
-                  <CheckCircle className="size-3 mr-0.5" />
-                  Pagado
-                </span>
-              </TableCell>
+    <>
+      <div className="rounded-md border border-neon-cyan/10 overflow-hidden">
+        <Table>
+          <TableHeader>
+            <TableRow className="border-neon-cyan/10 hover:bg-transparent">
+              <TableHead className="text-neon-cyan/60 text-xs h-8">Fecha</TableHead>
+              <TableHead className="text-neon-cyan/60 text-xs h-8 text-right">Monto</TableHead>
+              <TableHead className="text-neon-cyan/60 text-xs h-8 hidden sm:table-cell">Cuenta</TableHead>
+              <TableHead className="text-neon-cyan/60 text-xs h-8 text-center">Estado</TableHead>
+              <TableHead className="text-neon-cyan/60 text-xs h-8 text-right">Acciones</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+          </TableHeader>
+          <TableBody>
+            {payments.map((tx) => (
+              <TableRow key={tx.id} className="border-neon-cyan/5 hover:bg-neon-cyan/5">
+                {/* Fecha */}
+                <TableCell className="text-xs py-1.5">
+                  {formatDate(tx.date)}
+                </TableCell>
+                {/* Monto */}
+                <TableCell className="text-xs py-1.5 text-right font-mono font-medium text-neon-pink">
+                  {formatCurrency(tx.amount)}
+                </TableCell>
+                {/* Cuenta */}
+                <TableCell className="text-xs py-1.5 text-muted-foreground hidden sm:table-cell">
+                  {getAccountName(tx.accountId)}
+                </TableCell>
+                {/* Estado */}
+                <TableCell className="text-xs py-1.5 text-center">
+                  <span
+                    className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[10px] font-medium"
+                    style={{ backgroundColor: '#01ff8922', border: '1px solid #01ff8944', color: '#01ff89' }}
+                  >
+                    <CheckCircle className="size-3 mr-0.5" />
+                    Pagado
+                  </span>
+                </TableCell>
+                {/* Acciones */}
+                <TableCell className="text-xs py-1.5 text-right">
+                  <div className="flex items-center justify-end gap-0.5">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-6 text-muted-foreground hover:text-neon-yellow hover:bg-neon-yellow/10"
+                      onClick={() => openEditPayment(tx)}
+                      title="Editar pago"
+                    >
+                      <Pencil className="size-3" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-6 text-muted-foreground hover:text-neon-pink hover:bg-neon-pink/10"
+                      onClick={() => confirmDeletePayment(tx)}
+                      title="Eliminar pago"
+                    >
+                      <Trash2 className="size-3" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+            {/* Total row */}
+            <TableRow className="border-neon-cyan/20 bg-neon-cyan/5">
+              <TableCell className="text-xs py-2 font-bold text-neon-cyan">Total</TableCell>
+              <TableCell className="text-xs py-2 text-right font-mono font-bold text-neon-cyan">
+                {formatCurrency(totalPayments)}
+              </TableCell>
+              <TableCell className="hidden sm:table-cell" />
+              <TableCell />
+              <TableCell />
+            </TableRow>
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* ─── Edit Payment Dialog ──────────────────────────────────── */}
+      <Dialog open={editPaymentOpen} onOpenChange={setEditPaymentOpen}>
+        <DialogContent className="bg-card border-neon-yellow/20 max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-neon-yellow">Editar Pago</DialogTitle>
+            <DialogDescription>
+              Modifica los datos del pago registrado
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Monto</Label>
+              <Input
+                type="number"
+                step="1"
+                value={editAmount}
+                onChange={(e) => setEditAmount(Number(e.target.value) || 0)}
+                className="border-neon-yellow/20 focus-visible:border-neon-yellow/50"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Fecha</Label>
+              <DatePickerField
+                value={editDate}
+                onChange={(e) => setEditDate((e.target as HTMLInputElement).value)}
+                accentColor={YELLOW}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Descripción</Label>
+              <Input
+                value={editDescription}
+                onChange={(e) => setEditDescription(e.target.value)}
+                placeholder="Descripción del pago"
+                className="border-neon-yellow/20 focus-visible:border-neon-yellow/50"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setEditPaymentOpen(false)}
+              className="border-neon-yellow/20"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={onSaveEditPayment}
+              disabled={saving || editAmount <= 0}
+              className="bg-neon-yellow/20 border border-neon-yellow/50 text-neon-yellow hover:bg-neon-yellow/30 disabled:opacity-50"
+            >
+              {saving ? 'Guardando...' : 'Guardar Cambios'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ─── Delete Payment Dialog ───────────────────────────────── */}
+      <AlertDialog open={deletePaymentOpen} onOpenChange={setDeletePaymentOpen}>
+        <AlertDialogContent className="bg-card border-neon-pink/20">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-neon-pink">Eliminar Pago</AlertDialogTitle>
+            <AlertDialogDescription>
+              ¿Estás seguro de eliminar este pago de {deletingPayment ? formatCurrency(deletingPayment.amount) : ''}?
+              Se restaurará el saldo en la cuenta correspondiente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={onDeletePayment}
+              className="bg-neon-pink/20 border border-neon-pink/50 text-neon-pink hover:bg-neon-pink/30"
+            >
+              Eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
