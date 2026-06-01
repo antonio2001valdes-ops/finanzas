@@ -175,8 +175,8 @@ export const dashboardService = {
       };
     });
 
-    // Recent transactions (last 10)
-    const recentTransactions = allTransactions
+    // Recent transactions (last 10) — only from the selected month
+    const recentTransactions = monthTransactions
       .sort((a, b) => b.date.localeCompare(a.date))
       .slice(0, 10);
 
