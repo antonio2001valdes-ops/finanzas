@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Settings2, GripVertical, Eye, EyeOff, RotateCcw, X } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Settings2, GripVertical, Eye, EyeOff, RotateCcw, X, ChevronUp, ChevronDown } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { dashboardPrefsService, DEFAULT_DASHBOARD_SECTIONS } from '@/lib/data'
 import type { DashboardSectionConfig } from '@/lib/db-client'
@@ -30,46 +30,51 @@ interface DashboardCustomizeDialogProps {
 function SectionRow({
   section,
   index,
+  totalCount,
   onToggleVisible,
-  onDragStart,
-  onDragOver,
-  onDrop,
-  onDragEnd,
-  isDraggedOver,
+  onMoveUp,
+  onMoveDown,
+  isDragTarget,
   isDragging,
+  dragListeners,
+  dragRef,
 }: {
   section: DashboardSectionConfig
   index: number
+  totalCount: number
   onToggleVisible: (key: string) => void
-  onDragStart: (e: React.DragEvent, index: number) => void
-  onDragOver: (e: React.DragEvent, index: number) => void
-  onDrop: (e: React.DragEvent, index: number) => void
-  onDragEnd: () => void
-  isDraggedOver: boolean
+  onMoveUp: (index: number) => void
+  onMoveDown: (index: number) => void
+  isDragTarget: boolean
   isDragging: boolean
+  dragListeners?: React.HTMLAttributes<HTMLElement>
+  dragRef?: (el: HTMLElement | null) => void
 }) {
+  const canMoveUp = index > 0
+  const canMoveDown = index < totalCount - 1
+
   return (
     <motion.div
       layout
       initial={{ opacity: 0, x: -12 }}
-      animate={{ opacity: isDragging ? 0.4 : 1, x: 0, scale: isDragging ? 0.97 : 1 }}
+      animate={{
+        opacity: isDragging ? 0.4 : 1,
+        x: 0,
+        scale: isDragging ? 0.97 : 1,
+      }}
       transition={{ duration: 0.2, delay: index * 0.03 }}
-      draggable
-      onDragStart={(e) => onDragStart(e as unknown as React.DragEvent, index)}
-      onDragOver={(e) => onDragOver(e as unknown as React.DragEvent, index)}
-      onDrop={(e) => onDrop(e as unknown as React.DragEvent, index)}
-      onDragEnd={onDragEnd}
+      ref={dragRef}
       className={`
-        group relative flex items-center gap-3 rounded-lg border px-3 py-2.5
-        transition-all duration-200 cursor-grab active:cursor-grabbing select-none
-        ${isDraggedOver
+        group relative flex items-center gap-2 rounded-lg border px-3 py-2.5
+        transition-all duration-200 select-none
+        ${isDragTarget
           ? 'border-[#05d9e8]/60 bg-[#05d9e8]/8'
           : 'border-border/40 bg-card/60 hover:bg-card/80 hover:border-[#05d9e8]/30'
         }
         ${isDragging ? 'shadow-lg' : ''}
       `}
       style={
-        isDraggedOver
+        isDragTarget
           ? {
               boxShadow: `0 0 12px rgba(${NEON_CYAN_RGB},0.25), inset 0 0 12px rgba(${NEON_CYAN_RGB},0.06)`,
             }
@@ -80,15 +85,18 @@ function SectionRow({
             : undefined
       }
     >
-      {/* Grip Handle */}
-      <div className="flex items-center justify-center shrink-0">
+      {/* Drag Handle — pointer-event driven */}
+      <div
+        {...dragListeners}
+        className="flex items-center justify-center shrink-0 cursor-grab active:cursor-grabbing touch-none p-1 -ml-1 rounded hover:bg-muted/30 transition-colors"
+      >
         <GripVertical
           className="size-4 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors"
         />
       </div>
 
-      {/* Drag indicator line (shown on drag-over) */}
-      {isDraggedOver && (
+      {/* Drag indicator line (shown when this is drop target) */}
+      {isDragTarget && (
         <motion.div
           initial={{ scaleY: 0 }}
           animate={{ scaleY: 1 }}
@@ -110,6 +118,34 @@ function SectionRow({
       >
         {section.label}
       </span>
+
+      {/* Move Up / Move Down Buttons */}
+      <div className="flex flex-col items-center shrink-0 gap-0.5">
+        <button
+          onClick={() => onMoveUp(index)}
+          disabled={!canMoveUp}
+          className={`flex items-center justify-center size-5 rounded transition-all duration-200 ${
+            canMoveUp
+              ? 'text-muted-foreground hover:text-[#05d9e8] hover:bg-[#05d9e8]/10'
+              : 'text-muted-foreground/20 cursor-not-allowed'
+          }`}
+          title="Mover arriba"
+        >
+          <ChevronUp className="size-3.5" />
+        </button>
+        <button
+          onClick={() => onMoveDown(index)}
+          disabled={!canMoveDown}
+          className={`flex items-center justify-center size-5 rounded transition-all duration-200 ${
+            canMoveDown
+              ? 'text-muted-foreground hover:text-[#05d9e8] hover:bg-[#05d9e8]/10'
+              : 'text-muted-foreground/20 cursor-not-allowed'
+          }`}
+          title="Mover abajo"
+        >
+          <ChevronDown className="size-3.5" />
+        </button>
+      </div>
 
       {/* Visibility Toggle */}
       <button
@@ -150,9 +186,15 @@ export function DashboardCustomizeDialog({
 }: DashboardCustomizeDialogProps) {
   const [sections, setSections] = useState<DashboardSectionConfig[]>([])
   const [hasChanges, setHasChanges] = useState(false)
-  const [dragIndex, setDragIndex] = useState<number | null>(null)
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
   const [isSaving, setIsSaving] = useState(false)
+
+  // ── Pointer-based drag state ──
+  const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [dragTargetIndex, setDragTargetIndex] = useState<number | null>(null)
+  const dragStartY = useRef<number>(0)
+  const dragCurrentY = useRef<number>(0)
+  const listRef = useRef<HTMLDivElement>(null)
+  const rowRefs = useRef<Map<number, HTMLDivElement>>(new Map())
 
   // ── Load preferences when dialog opens ──
   const loadPreferences = useCallback(async () => {
@@ -162,7 +204,7 @@ export function DashboardCustomizeDialog({
       setSections(sorted)
       setHasChanges(false)
       setDragIndex(null)
-      setDragOverIndex(null)
+      setDragTargetIndex(null)
     } catch {
       // Fallback to defaults
       setSections([...DEFAULT_DASHBOARD_SECTIONS])
@@ -184,52 +226,137 @@ export function DashboardCustomizeDialog({
     setHasChanges(true)
   }, [])
 
-  // ── Drag & Drop handlers (HTML5 native) ──
-  const handleDragStart = useCallback((e: React.DragEvent, index: number) => {
-    setDragIndex(index)
-    // Set drag image data
-    if (e.dataTransfer) {
-      e.dataTransfer.effectAllowed = 'move'
-      e.dataTransfer.setData('text/plain', String(index))
-    }
+  // ── Move section up/down (always reliable) ──
+  const handleMoveUp = useCallback((index: number) => {
+    if (index <= 0) return
+    setSections((prev) => {
+      const updated = [...prev]
+      const temp = updated[index]
+      updated[index] = updated[index - 1]
+      updated[index - 1] = temp
+      return updated.map((s, i) => ({ ...s, order: i }))
+    })
+    setHasChanges(true)
   }, [])
 
-  const handleDragOver = useCallback((e: React.DragEvent, index: number) => {
-    e.preventDefault()
-    if (e.dataTransfer) {
-      e.dataTransfer.dropEffect = 'move'
-    }
-    setDragOverIndex(index)
+  const handleMoveDown = useCallback((index: number) => {
+    setSections((prev) => {
+      if (index >= prev.length - 1) return prev
+      const updated = [...prev]
+      const temp = updated[index]
+      updated[index] = updated[index + 1]
+      updated[index + 1] = temp
+      return updated.map((s, i) => ({ ...s, order: i }))
+    })
+    setHasChanges(true)
   }, [])
 
-  const handleDrop = useCallback(
-    (e: React.DragEvent, dropIndex: number) => {
-      e.preventDefault()
-      if (dragIndex === null || dragIndex === dropIndex) {
-        setDragIndex(null)
-        setDragOverIndex(null)
-        return
+  // ── Pointer-based drag handlers ──
+  const getTargetIndexFromY = useCallback((clientY: number): number | null => {
+    let closestIndex: number | null = null
+    let closestDistance = Infinity
+
+    rowRefs.current.forEach((el, idx) => {
+      if (!el) return
+      const rect = el.getBoundingClientRect()
+      const midY = rect.top + rect.height / 2
+      const distance = Math.abs(clientY - midY)
+      if (distance < closestDistance) {
+        closestDistance = distance
+        closestIndex = idx
       }
+    })
 
+    return closestIndex
+  }, [])
+
+  const handleDragPointerDown = useCallback((e: React.PointerEvent, index: number) => {
+    // Only start drag from the grip handle (left mouse button or touch)
+    if (e.button !== 0) return
+    e.preventDefault()
+    e.stopPropagation()
+
+    setDragIndex(index)
+    setDragTargetIndex(null)
+    dragStartY.current = e.clientY
+    dragCurrentY.current = e.clientY
+
+    // Capture pointer for reliable tracking
+    ;(e.target as HTMLElement).setPointerCapture(e.pointerId)
+  }, [])
+
+  const handleDragPointerMove = useCallback((e: React.PointerEvent) => {
+    if (dragIndex === null) return
+    e.preventDefault()
+
+    dragCurrentY.current = e.clientY
+    const targetIdx = getTargetIndexFromY(e.clientY)
+    if (targetIdx !== null && targetIdx !== dragIndex) {
+      setDragTargetIndex(targetIdx)
+    } else {
+      setDragTargetIndex(null)
+    }
+  }, [dragIndex, getTargetIndexFromY])
+
+  const handleDragPointerUp = useCallback((e: React.PointerEvent) => {
+    if (dragIndex === null) return
+    e.preventDefault()
+
+    const targetIdx = getTargetIndexFromY(e.clientY)
+
+    if (targetIdx !== null && targetIdx !== dragIndex) {
+      // Perform the reorder
       setSections((prev) => {
         const updated = [...prev]
         const [removed] = updated.splice(dragIndex, 1)
-        updated.splice(dropIndex, 0, removed)
-        // Reassign order values
+        updated.splice(targetIdx, 0, removed)
         return updated.map((s, i) => ({ ...s, order: i }))
       })
-
       setHasChanges(true)
-      setDragIndex(null)
-      setDragOverIndex(null)
-    },
-    [dragIndex]
-  )
+    }
 
-  const handleDragEnd = useCallback(() => {
     setDragIndex(null)
-    setDragOverIndex(null)
-  }, [])
+    setDragTargetIndex(null)
+  }, [dragIndex, getTargetIndexFromY])
+
+  // ── Global pointer move/up listeners (for drag outside grip area) ──
+  useEffect(() => {
+    if (dragIndex === null) return
+
+    const handleMove = (e: PointerEvent) => {
+      dragCurrentY.current = e.clientY
+      const targetIdx = getTargetIndexFromY(e.clientY)
+      if (targetIdx !== null && targetIdx !== dragIndex) {
+        setDragTargetIndex(targetIdx)
+      } else {
+        setDragTargetIndex(null)
+      }
+    }
+
+    const handleUp = (e: PointerEvent) => {
+      const targetIdx = getTargetIndexFromY(e.clientY)
+
+      if (targetIdx !== null && targetIdx !== dragIndex) {
+        setSections((prev) => {
+          const updated = [...prev]
+          const [removed] = updated.splice(dragIndex, 1)
+          updated.splice(targetIdx, 0, removed)
+          return updated.map((s, i) => ({ ...s, order: i }))
+        })
+        setHasChanges(true)
+      }
+
+      setDragIndex(null)
+      setDragTargetIndex(null)
+    }
+
+    window.addEventListener('pointermove', handleMove)
+    window.addEventListener('pointerup', handleUp)
+    return () => {
+      window.removeEventListener('pointermove', handleMove)
+      window.removeEventListener('pointerup', handleUp)
+    }
+  }, [dragIndex, getTargetIndexFromY])
 
   // ── Reset to defaults ──
   const handleReset = useCallback(() => {
@@ -262,6 +389,20 @@ export function DashboardCustomizeDialog({
   // ── Count visible sections ──
   const visibleCount = sections.filter((s) => s.visible).length
   const allHidden = sections.length > 0 && visibleCount === 0
+
+  // ── Drag listeners factory for grip handle ──
+  const getDragListeners = useCallback((index: number) => ({
+    onPointerDown: (e: React.PointerEvent) => handleDragPointerDown(e, index),
+  }), [handleDragPointerDown])
+
+  // ── Ref callback for row tracking ──
+  const getRowRef = useCallback((index: number) => (el: HTMLDivElement | null) => {
+    if (el) {
+      rowRefs.current.set(index, el)
+    } else {
+      rowRefs.current.delete(index)
+    }
+  }, [])
 
   return (
     <AnimatePresence>
@@ -331,7 +472,7 @@ export function DashboardCustomizeDialog({
                       Personalizar Dashboard
                     </h2>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Arrastra para reordenar · Oculta las secciones que no necesites
+                      Arrastra o usa las flechas para reordenar · Oculta las secciones que no necesites
                     </p>
                   </div>
                 </div>
@@ -385,19 +526,20 @@ export function DashboardCustomizeDialog({
 
               {/* ── Draggable section list ── */}
               <div className="px-5 pb-4 max-h-[400px] overflow-y-auto cyber-scrollbar">
-                <div className="space-y-1.5">
+                <div className="space-y-1.5" ref={listRef}>
                   {sections.map((section, index) => (
                     <SectionRow
                       key={section.key}
                       section={section}
                       index={index}
+                      totalCount={sections.length}
                       onToggleVisible={handleToggleVisible}
-                      onDragStart={handleDragStart}
-                      onDragOver={handleDragOver}
-                      onDrop={handleDrop}
-                      onDragEnd={handleDragEnd}
-                      isDraggedOver={dragOverIndex === index && dragIndex !== null && dragIndex !== index}
+                      onMoveUp={handleMoveUp}
+                      onMoveDown={handleMoveDown}
+                      isDragTarget={dragTargetIndex === index && dragIndex !== null && dragIndex !== index}
                       isDragging={dragIndex === index}
+                      dragListeners={getDragListeners(index)}
+                      dragRef={getRowRef(index)}
                     />
                   ))}
                 </div>
