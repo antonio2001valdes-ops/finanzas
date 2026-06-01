@@ -24,10 +24,23 @@ const WHITE = 255
 
 // ─── Generate Monthly Summary PDF ─────────────────────────────────
 
+// Detect Next.js basePath from the page's script tags (works in both dev and static export)
+function detectBasePath(): string {
+  if (typeof document === 'undefined') return ''
+  const script = document.querySelector('script[src*="/_next/"]')
+  if (script) {
+    const src = script.getAttribute('src') ?? ''
+    const match = src.match(/^(.+?)\/_next\//)
+    if (match) return match[1]
+  }
+  return ''
+}
+
 export async function generateMonthlySummaryPDF(month: number, year: number): Promise<void> {
+  const basePath = detectBasePath()
   const [fontRegular, fontBold] = await Promise.all([
-    loadFont('/fonts/LiberationSans-Regular.ttf'),
-    loadFont('/fonts/LiberationSans-Bold.ttf'),
+    loadFont(`${basePath}/fonts/LiberationSans-Regular.ttf`),
+    loadFont(`${basePath}/fonts/LiberationSans-Bold.ttf`),
   ])
 
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
@@ -71,7 +84,7 @@ export async function generateMonthlySummaryPDF(month: number, year: number): Pr
   const svcPaid = paidBills.reduce((s, b) => s + b.amount, 0)
   const svcPend = unpaidBills.reduce((s, b) => s + b.amount, 0)
   const debtRem = debts.reduce((s, d) => s + d.remainingAmount, 0)
-  const debtOrig = debts.reduce((s, d) => s + d.originalAmount, 0)
+  const debtOrig = debts.reduce((s, d) => s + d.totalAmount, 0)
   const savTarget = savings.reduce((s, g) => s + g.targetAmount, 0)
   const savCurrent = savings.reduce((s, g) => s + g.currentAmount, 0)
   const savPct = savTarget > 0 ? (savCurrent / savTarget) * 100 : 0
