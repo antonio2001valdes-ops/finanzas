@@ -1,3 +1,3 @@
 :HL["/finanzas/_next/static/chunks/a7d5d0791c8c6223.css","style"]
-:HL["/finanzas/_next/static/chunks/3b281c36729a115b.css","style"]
-0:{"buildId":"qDe314AaOZ05nTe2uU3K8","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"/_not-found","paramType":null,"paramKey":"/_not-found","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":true},"staleTime":300}
+:HL["/finanzas/_next/static/chunks/4a38324b35ddfe12.css","style"]
+0:{"buildId":"6jGSiKfqyRLjWqY9DrCt6","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"/_not-found","paramType":null,"paramKey":"/_not-found","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":true},"staleTime":300}
