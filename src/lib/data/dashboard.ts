@@ -73,10 +73,17 @@ export const dashboardService = {
       pendingCount: pendingRecurring.length,
     };
 
+    // ── Service bills pending this month ──
+    const monthBills = serviceBills.filter((b) => b.dueDate >= startDate && b.dueDate <= endDate);
+    const unpaidBills = monthBills.filter((b) => !b.paid);
+    const pendingServiceBillsTotal = unpaidBills.reduce((s, b) => s + b.amount, 0);
+
     // adjustedExpenses: totalExpenses already includes paid service bills (via transactions),
     // paid recurring (via transactions), and paid debt installments (via transactions).
-    // We only add pending items that don't have transactions yet.
-    const adjustedExpenses = totalExpenses + pendingRecurringTotal;
+    // We add pending items that don't have transactions yet:
+    // - pending recurring (due but not yet paid)
+    // - pending service bills (unpaid bills for the month)
+    const adjustedExpenses = totalExpenses + pendingRecurringTotal + pendingServiceBillsTotal;
     const balance = totalIncome - adjustedExpenses;
 
     // Savings total
@@ -198,14 +205,12 @@ export const dashboardService = {
     const previousMonthExpenses = prevMonthTransactions.filter((t) => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
     const previousMonthBalance = previousMonthIncome - previousMonthExpenses;
 
-    // ── Service Summary ──
-    const monthBills = serviceBills.filter((b) => b.dueDate >= startDate && b.dueDate <= endDate);
+    // ── Service Summary (uses monthBills and unpaidBills calculated above) ──
     const paidBills = monthBills.filter((b) => b.paid);
-    const unpaidBills = monthBills.filter((b) => !b.paid);
     const serviceSummary = {
       totalPaid: paidBills.reduce((s, b) => s + b.amount, 0),
       paidCount: paidBills.length,
-      pendingAmount: unpaidBills.reduce((s, b) => s + b.amount, 0),
+      pendingAmount: pendingServiceBillsTotal,
       pendingCount: unpaidBills.length,
       totalBills: monthBills.length,
     };
