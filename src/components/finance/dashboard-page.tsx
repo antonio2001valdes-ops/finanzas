@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState, useEffect, useCallback } from 'react'
 import { motion } from 'framer-motion'
 import {
   TrendingUp,
@@ -24,6 +24,7 @@ import {
   Clock,
   ArrowLeftRight,
   RefreshCw,
+  Settings2,
 } from 'lucide-react'
 import {
   LineChart,
@@ -40,7 +41,9 @@ import {
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Button } from '@/components/ui/button'
-import { dashboardService, useAsyncData } from '@/lib/data'
+import { dashboardService, useAsyncData, dashboardPrefsService, notificationService } from '@/lib/data'
+import type { DashboardPreferences } from '@/lib/db-client'
+import { DashboardCustomizeDialog } from './dashboard-customize-dialog'
 import { formatCurrency, formatDate, MONTHS_ES, CHART_COLORS, ACCOUNT_TYPES } from '@/lib/finance-utils'
 import { cn } from '@/lib/utils'
 
@@ -286,6 +289,21 @@ function DashboardSkeleton() {
   )
 }
 
+// ─── Default section order ────────────────────────────────────────────
+
+const DEFAULT_ORDER: Record<string, number> = {
+  statCards: 0,
+  serviceDebtSummary: 1,
+  monthlyComparison: 2,
+  dailyChart: 3,
+  categoryChart: 4,
+  trendChart: 5,
+  accounts: 6,
+  budgets: 7,
+  upcomingDue: 8,
+  recentTransactions: 9,
+}
+
 // ─── Main Dashboard Page ────────────────────────────────────────────
 
 interface DashboardPageProps {
@@ -299,6 +317,31 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
   const now = new Date()
   const month = currentMonth ?? now.getMonth() + 1
   const year = currentYear ?? now.getFullYear()
+
+  // ── Dashboard customization ──
+  const [customizeOpen, setCustomizeOpen] = useState(false)
+  const [dashboardPrefs, setDashboardPrefs] = useState<DashboardPreferences | null>(null)
+
+  useEffect(() => {
+    dashboardPrefsService.get().then(setDashboardPrefs)
+  }, [customizeOpen]) // reload when dialog closes
+
+  const isSectionVisible = useCallback((key: string): boolean => {
+    if (!dashboardPrefs) return true
+    const section = dashboardPrefs.sections.find(s => s.key === key)
+    return section?.visible ?? true
+  }, [dashboardPrefs])
+
+  const getSectionOrder = useCallback((key: string): number => {
+    if (!dashboardPrefs) return DEFAULT_ORDER[key] ?? 99
+    const section = dashboardPrefs.sections.find(s => s.key === key)
+    return section?.order ?? 99
+  }, [dashboardPrefs])
+
+  // ── Check notifications on mount ──
+  useEffect(() => {
+    notificationService.checkAndGenerateAlerts(month, year).catch(() => {})
+  }, [month, year])
 
   const { data, loading, error } = useAsyncData(
     () => dashboardService.getData(month, year),
@@ -412,6 +455,14 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
           >
             Dashboard
           </h1>
+          <button
+            onClick={() => setCustomizeOpen(true)}
+            className="flex items-center gap-1.5 rounded-md border border-neon-cyan/20 bg-background/50 px-2.5 py-1.5 text-xs text-muted-foreground hover:border-neon-cyan/40 hover:text-neon-cyan hover:shadow-[0_0_10px_rgba(5,217,232,0.15)] transition-all"
+            title="Personalizar dashboard"
+          >
+            <Settings2 className="size-3.5" />
+            <span className="hidden sm:inline">Personalizar</span>
+          </button>
         </div>
 
         {/* Month Navigation */}
@@ -466,6 +517,7 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
       </motion.div>
 
       {/* ── 2. Stat Cards Grid ── */}
+      {isSectionVisible('statCards') && (
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         {/* Ingresos */}
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
@@ -650,8 +702,10 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
           </Card>
         </motion.div>
       </div>
+      )}
 
       {/* ── 3. Service Expenses + Debt Summary (Side by Side) ── */}
+      {isSectionVisible('serviceDebtSummary') && (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <SectionCard title="Gastos de Servicios" icon={FileText} neonKey="orange" delay={0.35} actionLabel="Ver todo" onAction={() => onNavigate?.('services')}>
           <div className="space-y-3">
@@ -699,8 +753,10 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
           </div>
         </SectionCard>
       </div>
+      )}
 
       {/* ── 4. Monthly Comparison ── */}
+      {isSectionVisible('monthlyComparison') && (
       <SectionCard title="Comparación Mensual" icon={BarChart3} neonKey="cyan" delay={0.45}>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-1">
@@ -732,10 +788,12 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
           </div>
         </div>
       </SectionCard>
+      )}
 
       {/* ── 5. Charts Row (3 columns) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* Ingresos vs Gastos Diarios */}
+        {isSectionVisible('dailyChart') && (
         <SectionCard title="Ingresos vs Gastos Diarios" icon={TrendingUp} neonKey="green" delay={0.5}>
           {dailyChartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
@@ -752,8 +810,10 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
             <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">Sin datos</div>
           )}
         </SectionCard>
+        )}
 
         {/* Gastos por Categoría */}
+        {isSectionVisible('categoryChart') && (
         <SectionCard title="Gastos por Categoría" icon={PieChartIcon} neonKey="pink" delay={0.55}>
           {pieData.length > 0 ? (
             <div className="flex flex-col items-center">
@@ -794,8 +854,10 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
             <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">Sin gastos este mes</div>
           )}
         </SectionCard>
+        )}
 
         {/* Tendencia 6 Meses */}
+        {isSectionVisible('trendChart') && (
         <SectionCard title="Tendencia 6 Meses" icon={BarChart3} neonKey="cyan" delay={0.6}>
           {trendChartData.length > 0 ? (
             <ResponsiveContainer width="100%" height={200}>
@@ -813,9 +875,11 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
             <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">Sin datos suficientes</div>
           )}
         </SectionCard>
+        )}
       </div>
 
       {/* ── 6. Cuentas Bancarias ── */}
+      {isSectionVisible('accounts') && (
       <SectionCard title="Cuentas Bancarias" icon={Wallet} neonKey="cyan" delay={0.65} actionLabel="Ver todo" onAction={() => onNavigate?.('accounts')}>
         {data.accountSummaries.length > 0 ? (
           <div className="space-y-3">
@@ -850,10 +914,12 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
           <p className="text-center text-sm text-muted-foreground py-4">Sin cuentas registradas</p>
         )}
       </SectionCard>
+      )}
 
       {/* ── 7. Bottom Sections (2x2 grid) ── */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Presupuesto */}
+        {isSectionVisible('budgets') && (
         <SectionCard title="Resumen de Presupuesto" icon={Target} neonKey="yellow" delay={0.7}>
           {budgetDetails.length > 0 ? (
             <div className="space-y-3">
@@ -891,6 +957,7 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
             <p className="text-center text-sm text-muted-foreground py-8">Sin presupuestos configurados para este mes</p>
           )}
         </SectionCard>
+        )}
 
         {/* Proyección de Balance */}
         <SectionCard title="Proyección de Balance" icon={BarChart3} neonKey="cyan" delay={0.75}>
@@ -930,6 +997,7 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
         </SectionCard>
 
         {/* Próximos Vencimientos */}
+        {isSectionVisible('upcomingDue') && (
         <SectionCard title="Próximos Vencimientos" icon={Calendar} neonKey="orange" delay={0.8}>
           {data.upcomingDue.length > 0 ? (
             <div className="max-h-72 overflow-y-auto cyber-scrollbar">
@@ -941,8 +1009,10 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
             <p className="text-center text-sm text-muted-foreground py-8">No hay vencimientos próximos</p>
           )}
         </SectionCard>
+        )}
 
         {/* Transacciones Recientes */}
+        {isSectionVisible('recentTransactions') && (
         <SectionCard title="Transacciones Recientes" icon={Clock} neonKey="cyan" delay={0.85} actionLabel="Ver todo" onAction={() => onNavigate?.('transactions')}>
           {data.recentTransactions.length > 0 ? (
             <div className="space-y-0 max-h-72 overflow-y-auto cyber-scrollbar">
@@ -967,7 +1037,17 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
             <p className="text-center text-sm text-muted-foreground py-8">No hay transacciones este mes</p>
           )}
         </SectionCard>
+        )}
       </div>
+
+      {/* Dashboard Customize Dialog */}
+      <DashboardCustomizeDialog
+        open={customizeOpen}
+        onOpenChange={setCustomizeOpen}
+        onPreferencesChange={() => {
+          dashboardPrefsService.get().then(setDashboardPrefs)
+        }}
+      />
     </div>
   )
 }

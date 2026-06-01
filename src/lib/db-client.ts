@@ -175,6 +175,42 @@ export interface SchemaVersion {
   appliedAt: string;
 }
 
+export interface AppNotification {
+  id: string;
+  type: 'budget_exceeded' | 'service_due' | 'recurring_pending' | 'negative_balance' | 'savings_goal_reached';
+  title: string;
+  message: string;
+  severity: 'critical' | 'warning' | 'info' | 'success';
+  read: boolean;
+  relatedPage?: string;
+  relatedId?: string;
+  createdAt: string;
+}
+
+export interface DashboardPreferences {
+  id: string; // always 'default'
+  sections: DashboardSectionConfig[];
+  updatedAt: string;
+}
+
+export interface DashboardSectionConfig {
+  key: string;
+  label: string;
+  visible: boolean;
+  order: number;
+}
+
+export interface NotificationSettings {
+  id: string; // always 'default'
+  budgetExceeded: boolean;
+  serviceDue: boolean;
+  recurringPending: boolean;
+  negativeBalance: boolean;
+  savingsGoalReached: boolean;
+  browserNotifications: boolean;
+  updatedAt: string;
+}
+
 // ─── Database ───────────────────────────────────────────────────────
 
 const db = new Dexie('khorven-finance') as Dexie & {
@@ -193,6 +229,9 @@ const db = new Dexie('khorven-finance') as Dexie & {
   accountTransfers: EntityTable<AccountTransfer, 'id'>;
   categorizationRules: EntityTable<CategorizationRule, 'id'>;
   schemaVersions: EntityTable<SchemaVersion, 'id'>;
+  notifications: EntityTable<AppNotification, 'id'>;
+  notificationSettings: EntityTable<NotificationSettings, 'id'>;
+  dashboardPreferences: EntityTable<DashboardPreferences, 'id'>;
 };
 
 db.version(1).stores({
@@ -226,6 +265,13 @@ db.version(3).stores({
 // v4: Add sourceRecurringId index to transactions for recurring payment history
 db.version(4).stores({
   transactions: 'id, date, type, categoryType, categoryId, accountId, [categoryType+categoryId], sourceRecurringId',
+});
+
+// v5: Add notifications, notificationSettings, dashboardPreferences tables
+db.version(5).stores({
+  notifications: 'id, type, severity, read, createdAt',
+  notificationSettings: 'id',
+  dashboardPreferences: 'id',
 });
 
 export { db };
@@ -269,6 +315,9 @@ export async function clearAllData(): Promise<void> {
       db.accountTransfers,
       db.categorizationRules,
       db.schemaVersions,
+      db.notifications,
+      db.notificationSettings,
+      db.dashboardPreferences,
     ],
     async () => {
       await Promise.all([
@@ -287,6 +336,9 @@ export async function clearAllData(): Promise<void> {
         db.accountTransfers.clear(),
         db.categorizationRules.clear(),
         db.schemaVersions.clear(),
+        db.notifications.clear(),
+        db.notificationSettings.clear(),
+        db.dashboardPreferences.clear(),
       ]);
     }
   );

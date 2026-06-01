@@ -20,7 +20,7 @@ import {
 } from 'lucide-react'
 import { NavigationProvider, useNavigation } from '@/lib/navigation-context'
 import { OrgProvider } from '@/lib/org-context'
-import { useEnsureSeeded, searchService } from '@/lib/data'
+import { useEnsureSeeded, searchService, notificationService } from '@/lib/data'
 import type { SearchGroup, SearchMatch } from '@/lib/data'
 import { Sidebar } from './sidebar'
 import { DashboardPage } from './dashboard-page'
@@ -34,6 +34,7 @@ import { RecurringPage } from './recurring-page'
 import { ServicesPage } from './services-page'
 import { ReportsPage } from './reports-page'
 import { Input } from '@/components/ui/input'
+import { NotificationCenter } from './notification-center'
 import { formatCurrency, formatDate } from '@/lib/finance-utils'
 
 const NAV_ITEMS = [
@@ -383,16 +384,19 @@ function AppShellInner() {
           <h2 className="text-sm font-medium text-muted-foreground">
             {NAV_ITEMS.find((n) => n.id === activePage)?.label || 'Dashboard'}
           </h2>
-          <button
-            onClick={() => setSearchOpen(true)}
-            className="flex items-center gap-2 rounded-md border border-neon-cyan/20 bg-background/50 px-3 py-1.5 text-xs text-muted-foreground hover:border-neon-cyan/40 hover:text-neon-cyan hover:shadow-[0_0_10px_rgba(5,217,232,0.15)] transition-all"
-          >
-            <Search className="size-3.5" />
-            <span>Buscar...</span>
-            <kbd className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
-              ⌘K
-            </kbd>
-          </button>
+          <div className="flex items-center gap-3">
+            <NotificationCenter onNavigate={(page) => { navigateTo(page) }} />
+            <button
+              onClick={() => setSearchOpen(true)}
+              className="flex items-center gap-2 rounded-md border border-neon-cyan/20 bg-background/50 px-3 py-1.5 text-xs text-muted-foreground hover:border-neon-cyan/40 hover:text-neon-cyan hover:shadow-[0_0_10px_rgba(5,217,232,0.15)] transition-all"
+            >
+              <Search className="size-3.5" />
+              <span>Buscar...</span>
+              <kbd className="ml-2 rounded bg-muted px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+                ⌘K
+              </kbd>
+            </button>
+          </div>
         </header>
 
         {/* Page content */}
