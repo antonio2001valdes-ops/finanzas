@@ -304,6 +304,19 @@ const DEFAULT_ORDER: Record<string, number> = {
   recentTransactions: 9,
 }
 
+const SECTION_KEYS = [
+  'statCards',
+  'serviceDebtSummary',
+  'monthlyComparison',
+  'dailyChart',
+  'categoryChart',
+  'trendChart',
+  'accounts',
+  'budgets',
+  'upcomingDue',
+  'recentTransactions',
+] as const
+
 // ─── Main Dashboard Page ────────────────────────────────────────────
 
 interface DashboardPageProps {
@@ -321,10 +334,11 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
   // ── Dashboard customization ──
   const [customizeOpen, setCustomizeOpen] = useState(false)
   const [dashboardPrefs, setDashboardPrefs] = useState<DashboardPreferences | null>(null)
+  const [prefsVersion, setPrefsVersion] = useState(0)
 
   useEffect(() => {
     dashboardPrefsService.get().then(setDashboardPrefs)
-  }, [customizeOpen]) // reload when dialog closes
+  }, [prefsVersion])
 
   const isSectionVisible = useCallback((key: string): boolean => {
     if (!dashboardPrefs) return true
@@ -407,6 +421,13 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
     }
   }, [data])
 
+  // ── Sorted visible sections (must be before early returns) ──
+  const sortedVisibleSections = useMemo(() => {
+    return SECTION_KEYS
+      .filter(key => isSectionVisible(key))
+      .sort((a, b) => getSectionOrder(a) - getSectionOrder(b))
+  }, [isSectionVisible, getSectionOrder])
+
   if (loading) return <DashboardSkeleton />
   if (error) {
     return (
@@ -438,86 +459,9 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
   const totalIncomeCombined = data.totalIncome
   const totalExpensesCombined = data.totalExpenses + data.serviceSummary.pendingAmount + data.recurringSummary.pendingThisMonth
 
-  return (
-    <div className="p-4 md:p-6 space-y-5 overflow-y-auto cyber-scrollbar">
-
-      {/* ── 1. Header with Month Navigation ── */}
-      <motion.div
-        initial={{ opacity: 0, x: -12 }}
-        animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 0.3 }}
-        className="flex flex-col gap-3"
-      >
-        <div className="flex items-center justify-between">
-          <h1
-            className="text-2xl font-bold text-neon-cyan"
-            style={{ textShadow: '0 0 12px rgba(5,217,232,0.5), 0 0 24px rgba(5,217,232,0.2)' }}
-          >
-            Dashboard
-          </h1>
-          <button
-            onClick={() => setCustomizeOpen(true)}
-            className="flex items-center gap-1.5 rounded-md border border-neon-cyan/20 bg-background/50 px-2.5 py-1.5 text-xs text-muted-foreground hover:border-neon-cyan/40 hover:text-neon-cyan hover:shadow-[0_0_10px_rgba(5,217,232,0.15)] transition-all"
-            title="Personalizar dashboard"
-          >
-            <Settings2 className="size-3.5" />
-            <span className="hidden sm:inline">Personalizar</span>
-          </button>
-        </div>
-
-        {/* Month Navigation */}
-        <div className="flex items-center gap-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8 text-muted-foreground hover:text-neon-cyan hover:bg-neon-cyan/10"
-            onClick={handlePrevMonth}
-          >
-            <ChevronLeft className="size-4" />
-          </Button>
-          <span className="text-sm font-bold text-neon-cyan tabular-nums min-w-[140px] text-center">
-            {MONTHS_ES[month - 1]} {year}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-8 text-muted-foreground hover:text-neon-cyan hover:bg-neon-cyan/10"
-            onClick={handleNextMonth}
-          >
-            <ChevronRight className="size-4" />
-          </Button>
-          {month === now.getMonth() + 1 && year === now.getFullYear() && (
-            <span className="text-[10px] font-medium text-neon-cyan px-2 py-0.5 rounded-full bg-neon-cyan/10 border border-neon-cyan/30">
-              Hoy
-            </span>
-          )}
-        </div>
-
-        {/* Month grid */}
-        <div className="grid grid-cols-6 sm:grid-cols-12 gap-1">
-          {MONTHS_ES.map((name, i) => {
-            const m = i + 1
-            const isActive = m === month
-            return (
-              <button
-                key={m}
-                onClick={() => onMonthChange?.(m, year)}
-                className={cn(
-                  'rounded px-1 py-1 text-[10px] font-medium transition-all',
-                  isActive
-                    ? 'bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/40 shadow-neon-blue'
-                    : 'text-muted-foreground hover:bg-accent hover:text-foreground border border-transparent'
-                )}
-              >
-                {name.substring(0, 3)}
-              </button>
-            )
-          })}
-        </div>
-      </motion.div>
-
-      {/* ── 2. Stat Cards Grid ── */}
-      {isSectionVisible('statCards') && (
+  // ── Section renderers for dynamic ordering ──
+  const sectionRenderers: Record<string, () => React.ReactNode> = {
+    statCards: () => (
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
         {/* Ingresos */}
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
@@ -702,10 +646,9 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
           </Card>
         </motion.div>
       </div>
-      )}
+    ),
 
-      {/* ── 3. Service Expenses + Debt Summary (Side by Side) ── */}
-      {isSectionVisible('serviceDebtSummary') && (
+    serviceDebtSummary: () => (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <SectionCard title="Gastos de Servicios" icon={FileText} neonKey="orange" delay={0.35} actionLabel="Ver todo" onAction={() => onNavigate?.('services')}>
           <div className="space-y-3">
@@ -753,10 +696,9 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
           </div>
         </SectionCard>
       </div>
-      )}
+    ),
 
-      {/* ── 4. Monthly Comparison ── */}
-      {isSectionVisible('monthlyComparison') && (
+    monthlyComparison: () => (
       <SectionCard title="Comparación Mensual" icon={BarChart3} neonKey="cyan" delay={0.45}>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="space-y-1">
@@ -788,98 +730,91 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
           </div>
         </div>
       </SectionCard>
-      )}
+    ),
 
-      {/* ── 5. Charts Row (3 columns) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        {/* Ingresos vs Gastos Diarios */}
-        {isSectionVisible('dailyChart') && (
-        <SectionCard title="Ingresos vs Gastos Diarios" icon={TrendingUp} neonKey="green" delay={0.5}>
-          {dailyChartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={dailyChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                <XAxis dataKey="name" tick={{ fill: '#7c8ba1', fontSize: 10 }} axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} tickLine={false} />
-                <YAxis tick={{ fill: '#7c8ba1', fontSize: 10 }} axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} tickLine={false} tickFormatter={(v: number) => formatK(v)} />
-                <Tooltip content={<NeonTooltip />} />
-                <Line type="monotone" dataKey="Ingresos" stroke="#01ff89" strokeWidth={2} dot={false} activeDot={{ r: 3, stroke: '#01ff89', strokeWidth: 2, fill: '#0a0a1a' }} />
-                <Line type="monotone" dataKey="Gastos" stroke="#ff2a6d" strokeWidth={2} dot={false} activeDot={{ r: 3, stroke: '#ff2a6d', strokeWidth: 2, fill: '#0a0a1a' }} />
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">Sin datos</div>
-          )}
-        </SectionCard>
+    dailyChart: () => (
+      <SectionCard title="Ingresos vs Gastos Diarios" icon={TrendingUp} neonKey="green" delay={0.5}>
+        {dailyChartData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={dailyChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+              <XAxis dataKey="name" tick={{ fill: '#7c8ba1', fontSize: 10 }} axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} tickLine={false} />
+              <YAxis tick={{ fill: '#7c8ba1', fontSize: 10 }} axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} tickLine={false} tickFormatter={(v: number) => formatK(v)} />
+              <Tooltip content={<NeonTooltip />} />
+              <Line type="monotone" dataKey="Ingresos" stroke="#01ff89" strokeWidth={2} dot={false} activeDot={{ r: 3, stroke: '#01ff89', strokeWidth: 2, fill: '#0a0a1a' }} />
+              <Line type="monotone" dataKey="Gastos" stroke="#ff2a6d" strokeWidth={2} dot={false} activeDot={{ r: 3, stroke: '#ff2a6d', strokeWidth: 2, fill: '#0a0a1a' }} />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">Sin datos</div>
         )}
+      </SectionCard>
+    ),
 
-        {/* Gastos por Categoría */}
-        {isSectionVisible('categoryChart') && (
-        <SectionCard title="Gastos por Categoría" icon={PieChartIcon} neonKey="pink" delay={0.55}>
-          {pieData.length > 0 ? (
-            <div className="flex flex-col items-center">
-              <ResponsiveContainer width="100%" height={180}>
-                <RechartsPie>
-                  <Pie
-                    data={pieData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={45}
-                    outerRadius={75}
-                    paddingAngle={3}
-                    dataKey="value"
-                    stroke="none"
-                  >
-                    {pieData.map((entry, i) => (
-                      <Cell key={i} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value: number) => formatCurrency(value)}
-                    contentStyle={{ backgroundColor: 'rgba(17,17,40,0.95)', border: '1px solid rgba(5,217,232,0.2)', borderRadius: '8px', fontSize: '12px' }}
-                    itemStyle={{ color: '#e0e6f0' }}
-                    labelStyle={{ color: '#7c8ba1' }}
-                  />
-                </RechartsPie>
-              </ResponsiveContainer>
-              <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 justify-center">
-                {pieData.map((entry, i) => (
-                  <div key={i} className="flex items-center gap-1.5">
-                    <span className="inline-block size-2 rounded-full" style={{ backgroundColor: entry.color }} />
-                    <span className="text-[10px] text-muted-foreground">{entry.name}</span>
-                  </div>
-                ))}
-              </div>
+    categoryChart: () => (
+      <SectionCard title="Gastos por Categoría" icon={PieChartIcon} neonKey="pink" delay={0.55}>
+        {pieData.length > 0 ? (
+          <div className="flex flex-col items-center">
+            <ResponsiveContainer width="100%" height={180}>
+              <RechartsPie>
+                <Pie
+                  data={pieData}
+                  cx="50%"
+                  cy="50%"
+                  innerRadius={45}
+                  outerRadius={75}
+                  paddingAngle={3}
+                  dataKey="value"
+                  stroke="none"
+                >
+                  {pieData.map((entry, i) => (
+                    <Cell key={i} fill={entry.color} />
+                  ))}
+                </Pie>
+                <Tooltip
+                  formatter={(value: number) => formatCurrency(value)}
+                  contentStyle={{ backgroundColor: 'rgba(17,17,40,0.95)', border: '1px solid rgba(5,217,232,0.2)', borderRadius: '8px', fontSize: '12px' }}
+                  itemStyle={{ color: '#e0e6f0' }}
+                  labelStyle={{ color: '#7c8ba1' }}
+                />
+              </RechartsPie>
+            </ResponsiveContainer>
+            <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1 justify-center">
+              {pieData.map((entry, i) => (
+                <div key={i} className="flex items-center gap-1.5">
+                  <span className="inline-block size-2 rounded-full" style={{ backgroundColor: entry.color }} />
+                  <span className="text-[10px] text-muted-foreground">{entry.name}</span>
+                </div>
+              ))}
             </div>
-          ) : (
-            <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">Sin gastos este mes</div>
-          )}
-        </SectionCard>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">Sin gastos este mes</div>
         )}
+      </SectionCard>
+    ),
 
-        {/* Tendencia 6 Meses */}
-        {isSectionVisible('trendChart') && (
-        <SectionCard title="Tendencia 6 Meses" icon={BarChart3} neonKey="cyan" delay={0.6}>
-          {trendChartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height={200}>
-              <LineChart data={trendChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
-                <XAxis dataKey="name" tick={{ fill: '#7c8ba1', fontSize: 10 }} axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} tickLine={false} />
-                <YAxis tick={{ fill: '#7c8ba1', fontSize: 10 }} axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} tickLine={false} tickFormatter={(v: number) => formatK(v)} />
-                <Tooltip content={<NeonTooltip />} />
-                <Line type="monotone" dataKey="Ingresos" stroke="#01ff89" strokeWidth={2} dot={{ r: 3, fill: '#01ff89', stroke: '#0a0a1a', strokeWidth: 2 }} />
-                <Line type="monotone" dataKey="Gastos" stroke="#ff2a6d" strokeWidth={2} dot={{ r: 3, fill: '#ff2a6d', stroke: '#0a0a1a', strokeWidth: 2 }} />
-                <Line type="monotone" dataKey="Balance" stroke="#05d9e8" strokeWidth={2} dot={{ r: 3, fill: '#05d9e8', stroke: '#0a0a1a', strokeWidth: 2 }} />
-              </LineChart>
-            </ResponsiveContainer>
-          ) : (
-            <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">Sin datos suficientes</div>
-          )}
-        </SectionCard>
+    trendChart: () => (
+      <SectionCard title="Tendencia 6 Meses" icon={BarChart3} neonKey="cyan" delay={0.6}>
+        {trendChartData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={200}>
+            <LineChart data={trendChartData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+              <XAxis dataKey="name" tick={{ fill: '#7c8ba1', fontSize: 10 }} axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} tickLine={false} />
+              <YAxis tick={{ fill: '#7c8ba1', fontSize: 10 }} axisLine={{ stroke: 'rgba(255,255,255,0.1)' }} tickLine={false} tickFormatter={(v: number) => formatK(v)} />
+              <Tooltip content={<NeonTooltip />} />
+              <Line type="monotone" dataKey="Ingresos" stroke="#01ff89" strokeWidth={2} dot={false} activeDot={{ r: 3, stroke: '#01ff89', strokeWidth: 2, fill: '#0a0a1a' }} />
+              <Line type="monotone" dataKey="Gastos" stroke="#ff2a6d" strokeWidth={2} dot={false} activeDot={{ r: 3, stroke: '#ff2a6d', strokeWidth: 2, fill: '#0a0a1a' }} />
+              <Line type="monotone" dataKey="Balance" stroke="#05d9e8" strokeWidth={2} dot={false} activeDot={{ r: 3, stroke: '#05d9e8', strokeWidth: 2, fill: '#0a0a1a' }} />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex items-center justify-center h-[200px] text-muted-foreground text-sm">Sin datos de tendencia</div>
         )}
-      </div>
+      </SectionCard>
+    ),
 
-      {/* ── 6. Cuentas Bancarias ── */}
-      {isSectionVisible('accounts') && (
+    accounts: () => (
       <SectionCard title="Cuentas Bancarias" icon={Wallet} neonKey="cyan" delay={0.65} actionLabel="Ver todo" onAction={() => onNavigate?.('accounts')}>
         {data.accountSummaries.length > 0 ? (
           <div className="space-y-3">
@@ -914,139 +849,217 @@ export function DashboardPage({ currentMonth, currentYear, onMonthChange, onNavi
           <p className="text-center text-sm text-muted-foreground py-4">Sin cuentas registradas</p>
         )}
       </SectionCard>
-      )}
+    ),
 
-      {/* ── 7. Bottom Sections (2x2 grid) ── */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Presupuesto */}
-        {isSectionVisible('budgets') && (
-        <SectionCard title="Resumen de Presupuesto" icon={Target} neonKey="yellow" delay={0.7}>
-          {budgetDetails.length > 0 ? (
-            <div className="space-y-3">
-              {budgetDetails.map((b) => {
-                const cat = data.expenseByCategory.find(c => c.categoryId === b.categoryId)
-                return (
-                  <BudgetBar
-                    key={b.categoryId}
-                    name={b.categoryName}
-                    icon={cat?.categoryIcon ?? '📦'}
-                    spent={b.spent}
-                    budget={b.budgetAmount}
-                    percentage={b.percentage}
-                  />
-                )
-              })}
-              <div className="mt-3 p-2.5 rounded-lg border border-[#f9f002]/30 bg-[#f9f002]/5" style={{ boxShadow: '0 0 8px rgba(249,240,2,0.1)' }}>
-                <div className="grid grid-cols-3 gap-4 text-center">
-                  <div>
-                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Presupuesto</p>
-                    <p className="text-xs font-bold text-neon-cyan tabular-nums">{formatCurrency(budgetTotals.budgeted)}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Gastado</p>
-                    <p className="text-xs font-bold text-neon-pink tabular-nums">{formatCurrency(budgetTotals.spent)}</p>
-                  </div>
-                  <div>
-                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Restante</p>
-                    <p className="text-xs font-bold text-neon-green tabular-nums">{formatCurrency(budgetTotals.remaining)}</p>
-                  </div>
+    budgets: () => (
+      <SectionCard title="Resumen de Presupuesto" icon={Target} neonKey="yellow" delay={0.7}>
+        {budgetDetails.length > 0 ? (
+          <div className="space-y-3">
+            {budgetDetails.map((b) => {
+              const cat = data.expenseByCategory.find(c => c.categoryId === b.categoryId)
+              return (
+                <BudgetBar
+                  key={b.categoryId}
+                  name={b.categoryName}
+                  icon={cat?.categoryIcon ?? '📦'}
+                  spent={b.spent}
+                  budget={b.budgetAmount}
+                  percentage={b.percentage}
+                />
+              )
+            })}
+            <div className="mt-3 p-2.5 rounded-lg border border-[#f9f002]/30 bg-[#f9f002]/5" style={{ boxShadow: '0 0 8px rgba(249,240,2,0.1)' }}>
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Presupuesto</p>
+                  <p className="text-xs font-bold text-neon-cyan tabular-nums">{formatCurrency(budgetTotals.budgeted)}</p>
                 </div>
-              </div>
-            </div>
-          ) : (
-            <p className="text-center text-sm text-muted-foreground py-8">Sin presupuestos configurados para este mes</p>
-          )}
-        </SectionCard>
-        )}
-
-        {/* Proyección de Balance */}
-        <SectionCard title="Proyección de Balance" icon={BarChart3} neonKey="cyan" delay={0.75}>
-          <div className="grid grid-cols-3 gap-4">
-            <div className="space-y-1">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Promedio 3 meses</p>
-              <p className="text-lg font-bold text-neon-cyan tabular-nums" style={{ textShadow: '0 0 6px rgba(5,217,232,0.3)' }}>
-                {formatCurrency(balanceProjection.avg3)}
-              </p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Balance proyectado</p>
-              <p
-                className={`text-lg font-bold tabular-nums ${balanceProjection.projected >= 0 ? 'text-neon-green' : 'text-neon-pink'}`}
-                style={{ textShadow: `0 0 6px rgba(${balanceProjection.projected >= 0 ? NEON.green.rgb : NEON.pink.rgb},0.3)` }}
-              >
-                {formatCurrency(balanceProjection.projected)}
-              </p>
-            </div>
-            <div className="space-y-1">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Tendencia</p>
-              <div className="flex items-center gap-2">
-                {balanceProjection.trend === 'positive' ? (
-                  <>
-                    <ArrowUpRight className="size-5 text-neon-green" />
-                    <span className="text-lg font-bold text-neon-green">Positiva</span>
-                  </>
-                ) : (
-                  <>
-                    <ArrowDownRight className="size-5 text-neon-pink" />
-                    <span className="text-lg font-bold text-neon-pink">Negativa</span>
-                  </>
-                )}
+                <div>
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Gastado</p>
+                  <p className="text-xs font-bold text-neon-pink tabular-nums">{formatCurrency(budgetTotals.spent)}</p>
+                </div>
+                <div>
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Restante</p>
+                  <p className="text-xs font-bold text-neon-green tabular-nums">{formatCurrency(budgetTotals.remaining)}</p>
+                </div>
               </div>
             </div>
           </div>
-        </SectionCard>
-
-        {/* Próximos Vencimientos */}
-        {isSectionVisible('upcomingDue') && (
-        <SectionCard title="Próximos Vencimientos" icon={Calendar} neonKey="orange" delay={0.8}>
-          {data.upcomingDue.length > 0 ? (
-            <div className="max-h-72 overflow-y-auto cyber-scrollbar">
-              {data.upcomingDue.map((item) => (
-                <DueItem key={item.id} item={item} />
-              ))}
-            </div>
-          ) : (
-            <p className="text-center text-sm text-muted-foreground py-8">No hay vencimientos próximos</p>
-          )}
-        </SectionCard>
+        ) : (
+          <p className="text-center text-sm text-muted-foreground py-8">Sin presupuestos configurados para este mes</p>
         )}
+      </SectionCard>
+    ),
 
-        {/* Transacciones Recientes */}
-        {isSectionVisible('recentTransactions') && (
-        <SectionCard title="Transacciones Recientes" icon={Clock} neonKey="cyan" delay={0.85} actionLabel="Ver todo" onAction={() => onNavigate?.('transactions')}>
-          {data.recentTransactions.length > 0 ? (
-            <div className="space-y-0 max-h-72 overflow-y-auto cyber-scrollbar">
-              {data.recentTransactions.slice(0, 8).map((t) => (
-                <div key={t.id} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0">
-                  <div className="flex items-center gap-3">
-                    <div className="flex items-center justify-center size-8 rounded-full text-sm shrink-0 bg-muted/50">
-                      <ArrowLeftRight className="size-3.5 text-muted-foreground" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-foreground truncate max-w-[180px]">{t.description}</p>
-                      <p className="text-[11px] text-muted-foreground">{formatDate(t.date)}</p>
-                    </div>
+    upcomingDue: () => (
+      <SectionCard title="Próximos Vencimientos" icon={Calendar} neonKey="orange" delay={0.8}>
+        {data.upcomingDue.length > 0 ? (
+          <div className="max-h-72 overflow-y-auto cyber-scrollbar">
+            {data.upcomingDue.map((item) => (
+              <DueItem key={item.id} item={item} />
+            ))}
+          </div>
+        ) : (
+          <p className="text-center text-sm text-muted-foreground py-8">No hay vencimientos próximos</p>
+        )}
+      </SectionCard>
+    ),
+
+    recentTransactions: () => (
+      <SectionCard title="Transacciones Recientes" icon={Clock} neonKey="cyan" delay={0.85} actionLabel="Ver todo" onAction={() => onNavigate?.('transactions')}>
+        {data.recentTransactions.length > 0 ? (
+          <div className="space-y-0 max-h-72 overflow-y-auto cyber-scrollbar">
+            {data.recentTransactions.slice(0, 8).map((t) => (
+              <div key={t.id} className="flex items-center justify-between py-2 border-b border-border/20 last:border-0">
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center justify-center size-8 rounded-full text-sm shrink-0 bg-muted/50">
+                    <ArrowLeftRight className="size-3.5 text-muted-foreground" />
                   </div>
-                  <p className={`text-sm font-semibold tabular-nums ${t.type === 'income' ? 'text-neon-green' : 'text-neon-pink'}`}>
-                    {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
-                  </p>
+                  <div>
+                    <p className="text-sm font-medium text-foreground truncate max-w-[180px]">{t.description}</p>
+                    <p className="text-[11px] text-muted-foreground">{formatDate(t.date)}</p>
+                  </div>
                 </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-center text-sm text-muted-foreground py-8">No hay transacciones este mes</p>
-          )}
-        </SectionCard>
+                <p className={`text-sm font-semibold tabular-nums ${t.type === 'income' ? 'text-neon-green' : 'text-neon-pink'}`}>
+                  {t.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
+                </p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-center text-sm text-muted-foreground py-8">No hay transacciones este mes</p>
         )}
-      </div>
+      </SectionCard>
+    ),
+  }
+
+  return (
+    <div className="p-4 md:p-6 space-y-5 overflow-y-auto cyber-scrollbar">
+
+      {/* ── 1. Header with Month Navigation ── */}
+      <motion.div
+        initial={{ opacity: 0, x: -12 }}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.3 }}
+        className="flex flex-col gap-3"
+      >
+        <div className="flex items-center justify-between">
+          <h1
+            className="text-2xl font-bold text-neon-cyan"
+            style={{ textShadow: '0 0 12px rgba(5,217,232,0.5), 0 0 24px rgba(5,217,232,0.2)' }}
+          >
+            Dashboard
+          </h1>
+          <button
+            onClick={() => setCustomizeOpen(true)}
+            className="flex items-center gap-1.5 rounded-md border border-neon-cyan/20 bg-background/50 px-2.5 py-1.5 text-xs text-muted-foreground hover:border-neon-cyan/40 hover:text-neon-cyan hover:shadow-[0_0_10px_rgba(5,217,232,0.15)] transition-all"
+            title="Personalizar dashboard"
+          >
+            <Settings2 className="size-3.5" />
+            <span className="hidden sm:inline">Personalizar</span>
+          </button>
+        </div>
+
+        {/* Month Navigation */}
+        <div className="flex items-center gap-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 text-muted-foreground hover:text-neon-cyan hover:bg-neon-cyan/10"
+            onClick={handlePrevMonth}
+          >
+            <ChevronLeft className="size-4" />
+          </Button>
+          <span className="text-sm font-bold text-neon-cyan tabular-nums min-w-[140px] text-center">
+            {MONTHS_ES[month - 1]} {year}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 text-muted-foreground hover:text-neon-cyan hover:bg-neon-cyan/10"
+            onClick={handleNextMonth}
+          >
+            <ChevronRight className="size-4" />
+          </Button>
+          {month === now.getMonth() + 1 && year === now.getFullYear() && (
+            <span className="text-[10px] font-medium text-neon-cyan px-2 py-0.5 rounded-full bg-neon-cyan/10 border border-neon-cyan/30">
+              Hoy
+            </span>
+          )}
+        </div>
+
+        {/* Month grid */}
+        <div className="grid grid-cols-6 sm:grid-cols-12 gap-1">
+          {MONTHS_ES.map((name, i) => {
+            const m = i + 1
+            const isActive = m === month
+            return (
+              <button
+                key={m}
+                onClick={() => onMonthChange?.(m, year)}
+                className={cn(
+                  'rounded px-1 py-1 text-[10px] font-medium transition-all',
+                  isActive
+                    ? 'bg-neon-cyan/20 text-neon-cyan border border-neon-cyan/40 shadow-neon-blue'
+                    : 'text-muted-foreground hover:bg-accent hover:text-foreground border border-transparent'
+                )}
+              >
+                {name.substring(0, 3)}
+              </button>
+            )
+          })}
+        </div>
+      </motion.div>
+
+      {/* ── Dynamic Section Rendering ── */}
+      {sortedVisibleSections.map((key) => (
+        <div key={key}>
+          {sectionRenderers[key]()}
+        </div>
+      ))}
+
+      {/* ── Proyección de Balance (always visible) ── */}
+      <SectionCard title="Proyección de Balance" icon={BarChart3} neonKey="cyan" delay={0.75}>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="space-y-1">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Promedio 3 meses</p>
+            <p className="text-lg font-bold text-neon-cyan tabular-nums" style={{ textShadow: '0 0 6px rgba(5,217,232,0.3)' }}>
+              {formatCurrency(balanceProjection.avg3)}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Balance proyectado</p>
+            <p
+              className={`text-lg font-bold tabular-nums ${balanceProjection.projected >= 0 ? 'text-neon-green' : 'text-neon-pink'}`}
+              style={{ textShadow: `0 0 6px rgba(${balanceProjection.projected >= 0 ? NEON.green.rgb : NEON.pink.rgb},0.3)` }}
+            >
+              {formatCurrency(balanceProjection.projected)}
+            </p>
+          </div>
+          <div className="space-y-1">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Tendencia</p>
+            <div className="flex items-center gap-2">
+              {balanceProjection.trend === 'positive' ? (
+                <>
+                  <ArrowUpRight className="size-5 text-neon-green" />
+                  <span className="text-lg font-bold text-neon-green">Positiva</span>
+                </>
+              ) : (
+                <>
+                  <ArrowDownRight className="size-5 text-neon-pink" />
+                  <span className="text-lg font-bold text-neon-pink">Negativa</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      </SectionCard>
 
       {/* Dashboard Customize Dialog */}
       <DashboardCustomizeDialog
         open={customizeOpen}
         onOpenChange={setCustomizeOpen}
-        onPreferencesChange={() => {
-          dashboardPrefsService.get().then(setDashboardPrefs)
-        }}
+        onPreferencesChange={() => setPrefsVersion(v => v + 1)}
       />
     </div>
   )
