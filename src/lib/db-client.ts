@@ -26,6 +26,7 @@ export interface Account {
   name: string;
   type: string;
   balance: number;
+  initialBalance: number;
   currency: string;
   icon: string;
   color: string;
@@ -268,10 +269,18 @@ db.version(4).stores({
 });
 
 // v5: Add notifications, notificationSettings, dashboardPreferences tables
+// AND add initialBalance field to accounts for balance reconciliation
 db.version(5).stores({
   notifications: 'id, type, severity, read, createdAt',
   notificationSettings: 'id',
   dashboardPreferences: 'id',
+  accounts: 'id, name, type',
+}).upgrade(tx => {
+  // For each existing account, set initialBalance = current balance
+  // This preserves the current behavior: all existing deltas are "baked in"
+  return tx.table('accounts').toCollection().modify(account => {
+    account.initialBalance = account.balance;
+  });
 });
 
 export { db };

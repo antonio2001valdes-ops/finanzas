@@ -172,7 +172,7 @@ export const transactionService = {
   },
 
   async delete(id: string): Promise<void> {
-    await db.transaction('rw', [db.transactions, db.accounts], async () => {
+    await db.transaction('rw', [db.transactions, db.accounts, db.accountTransfers], async () => {
       const transaction = await db.transactions.get(id);
       if (!transaction) return;
 
@@ -180,16 +180,112 @@ export const transactionService = {
       if (transaction.accountId) {
         const account = await db.accounts.get(transaction.accountId);
         if (account) {
-          const delta =
-            transaction.type === 'income'
-              ? -transaction.amount
-              : transaction.type === 'expense'
-                ? transaction.amount
-                : 0;
-          await db.accounts.update(transaction.accountId, {
-            balance: account.balance + delta,
-            updatedAt: nowISO(),
-          });
+          if (transaction.type === 'transfer') {
+            // For transfers, find the corresponding AccountTransfer record
+            // to determine direction and reverse both accounts
+            const isOutgoing = await db.accountTransfers
+              .where('fromAccountId')
+              .equals(transaction.accountId)
+              .toArray()
+              .then(transfers =>
+                transfers.some(t =>
+                  t.amount === transaction.amount &&
+                  Math.abs(new Date(t.createdAt).getTime() - new Date(transaction.createdAt).getTime()) < 5000
+                )
+              );
+
+            if (isOutgoing) {
+              // This was an outgoing transfer - restore balance (add back the amount)
+              await db.accounts.update(transaction.accountId, {
+                balance: account.balance + transaction.amount,
+                updatedAt: nowISO(),
+              });
+              // Also restore the destination account
+              const matchingTransfers = await db.accountTransfers
+                .where('fromAccountId')
+                .equals(transaction.accountId)
+                .toArray();
+              const matchingTransfer = matchingTransfers.find(t =>
+                t.amount === transaction.amount &&
+                Math.abs(new Date(t.createdAt).getTime() - new Date(transaction.createdAt).getTime()) < 5000
+              );
+              if (matchingTransfer) {
+                const toAccount = await db.accounts.get(matchingTransfer.toAccountId);
+                if (toAccount) {
+                  await db.accounts.update(matchingTransfer.toAccountId, {
+                    balance: toAccount.balance - transaction.amount,
+                    updatedAt: nowISO(),
+                  });
+                }
+                // Delete the AccountTransfer record
+                await db.accountTransfers.delete(matchingTransfer.id);
+                // Delete the paired transfer-in transaction
+                const pairedTx = await db.transactions
+                  .where('accountId')
+                  .equals(matchingTransfer.toAccountId)
+                  .toArray();
+                const paired = pairedTx.find(t =>
+                  t.type === 'transfer' &&
+                  t.amount === transaction.amount &&
+                  Math.abs(new Date(t.createdAt).getTime() - new Date(transaction.createdAt).getTime()) < 5000
+                );
+                if (paired) {
+                  await db.transactions.delete(paired.id);
+                }
+              }
+            } else {
+              // This was an incoming transfer - restore balance (subtract the amount)
+              await db.accounts.update(transaction.accountId, {
+                balance: account.balance - transaction.amount,
+                updatedAt: nowISO(),
+              });
+              // Also restore the source account
+              const matchingTransfers = await db.accountTransfers
+                .where('toAccountId')
+                .equals(transaction.accountId)
+                .toArray();
+              const matchingTransfer = matchingTransfers.find(t =>
+                t.amount === transaction.amount &&
+                Math.abs(new Date(t.createdAt).getTime() - new Date(transaction.createdAt).getTime()) < 5000
+              );
+              if (matchingTransfer) {
+                const fromAccount = await db.accounts.get(matchingTransfer.fromAccountId);
+                if (fromAccount) {
+                  await db.accounts.update(matchingTransfer.fromAccountId, {
+                    balance: fromAccount.balance + transaction.amount,
+                    updatedAt: nowISO(),
+                  });
+                }
+                // Delete the AccountTransfer record
+                await db.accountTransfers.delete(matchingTransfer.id);
+                // Delete the paired transfer-out transaction
+                const pairedTx = await db.transactions
+                  .where('accountId')
+                  .equals(matchingTransfer.fromAccountId)
+                  .toArray();
+                const paired = pairedTx.find(t =>
+                  t.type === 'transfer' &&
+                  t.amount === transaction.amount &&
+                  Math.abs(new Date(t.createdAt).getTime() - new Date(transaction.createdAt).getTime()) < 5000
+                );
+                if (paired) {
+                  await db.transactions.delete(paired.id);
+                }
+              }
+            }
+          } else {
+            // Standard income/expense
+            const delta =
+              transaction.type === 'income'
+                ? -transaction.amount
+                : transaction.type === 'expense'
+                  ? transaction.amount
+                  : 0;
+            await db.accounts.update(transaction.accountId, {
+              balance: account.balance + delta,
+              updatedAt: nowISO(),
+            });
+          }
         }
       }
 

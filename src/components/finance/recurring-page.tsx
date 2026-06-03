@@ -18,14 +18,13 @@ import {
   CheckCircle,
   Clock,
   AlertTriangle,
-  FileText,
   History,
   DollarSign,
 } from 'lucide-react'
 import { toast } from 'sonner'
-import { recurringService, categoryService, serviceService, accountService, transactionService, useAsyncData } from '@/lib/data'
+import { recurringService, categoryService, accountService, transactionService, useAsyncData } from '@/lib/data'
 import { formatCurrency, formatDate } from '@/lib/finance-utils'
-import type { RecurringPayment, ExpenseCategory, ServiceAccount, Account, Transaction } from '@/lib/db-client'
+import type { RecurringPayment, ExpenseCategory, Account, Transaction } from '@/lib/db-client'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -104,18 +103,9 @@ const recurringSchema = z.object({
 
 type RecurringForm = z.infer<typeof recurringSchema>
 
-const billSchema = z.object({
-  serviceAccountId: z.string().min(1, 'Selecciona un servicio'),
-  amount: z.coerce.number().min(1, 'El monto debe ser mayor a 0'),
-  dueDate: z.string().min(1, 'La fecha es requerida'),
-})
-
-type BillForm = z.infer<typeof billSchema>
-
 // ─── Theme Colors ────────────────────────────────────────────────────
 
 const CYAN = '#00fff5'
-const YELLOW = '#f9f002'
 
 // ─── Component ──────────────────────────────────────────────────────
 
@@ -123,12 +113,6 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
   // Data
   const { data: recurringPayments, loading, refetch } = useAsyncData<RecurringPayment[]>(
     () => recurringService.getAll(),
-    []
-  )
-
-  // Service accounts for bill creation
-  const { data: serviceAccounts } = useAsyncData<ServiceAccount[]>(
-    () => serviceService.getAllAccounts(),
     []
   )
 
@@ -149,17 +133,6 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [recurringToDelete, setRecurringToDelete] = useState<RecurringPayment | null>(null)
   const [selectedRecurring, setSelectedRecurring] = useState<RecurringPayment | null>(null)
-
-  // Bill dialog state
-  const [billDialogOpen, setBillDialogOpen] = useState(false)
-  const [selectedRecurringForBill, setSelectedRecurringForBill] = useState<RecurringPayment | null>(null)
-
-  // Pay dialog with account selection
-  const [payAccountId, setPayAccountId] = useState<string>('')
-  const [paying, setPaying] = useState(false)
-
-  // Accounts for pay dialog
-  const { data: accounts } = useAsyncData<Account[]>(() => accountService.getAll(), [])
 
   // Expanded rows for payment history
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set())
@@ -251,44 +224,14 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
     }
   }
 
-  // ─── Bill Form ───────────────────────────────────────────────────
+  // Pay dialog with account selection
+  const [payAccountId, setPayAccountId] = useState<string>('')
+  const [paying, setPaying] = useState(false)
 
-  const billForm = useForm<BillForm>({
-    resolver: zodResolver(billSchema),
-    defaultValues: {
-      serviceAccountId: '',
-      amount: 0,
-      dueDate: '',
-    },
-  })
+  // Accounts for pay dialog
+  const { data: accounts } = useAsyncData<Account[]>(() => accountService.getAll(), [])
 
-  const openBillDialog = (payment: RecurringPayment) => {
-    setSelectedRecurringForBill(payment)
-    billForm.reset({
-      serviceAccountId: '',
-      amount: payment.amount,
-      dueDate: '',
-    })
-    setBillDialogOpen(true)
-  }
-
-  const onSubmitBill = async (data: BillForm) => {
-    try {
-      await serviceService.createBill({
-        serviceAccountId: data.serviceAccountId,
-        amount: data.amount,
-        dueDate: data.dueDate,
-        paid: false,
-      })
-      toast.success('Factura creada')
-      setBillDialogOpen(false)
-      refetch()
-    } catch {
-      toast.error('Error al crear la factura')
-    }
-  }
-
-  // ─── Pay ────────────────────────────────────────────────────────
+  // ─── Recurring Form ─────────────────────────────────────────────
 
   const openPayDialog = (payment: RecurringPayment) => {
     setSelectedRecurring(payment)
@@ -612,19 +555,6 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
                         {/* Acciones */}
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
-                            {/* Factura button - YELLOW, no calendar icon */}
-                            {isActive && (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-7 gap-1 px-2 border-neon-yellow/30 text-neon-yellow hover:bg-neon-yellow/15 hover:border-neon-yellow/50 hover:shadow-[0_0_8px_rgba(249,240,2,0.25)] transition-all text-xs"
-                                onClick={() => openBillDialog(payment)}
-                                title="Agregar Factura"
-                              >
-                                <FileText className="size-3.5" />
-                                <span className="hidden xl:inline">Factura</span>
-                              </Button>
-                            )}
                             {isActive && (
                               <Button
                                 variant="ghost"
@@ -878,107 +808,6 @@ export function RecurringPage({ currentMonth, currentYear }: { currentMonth?: nu
               </DialogFooter>
             </form>
           </Form>
-        </DialogContent>
-      </Dialog>
-
-      {/* ─── Add Bill Dialog (individual service buttons) ─────────── */}
-      <Dialog open={billDialogOpen} onOpenChange={setBillDialogOpen}>
-        <DialogContent className="bg-card border-neon-yellow/20 max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-neon-yellow">
-              Agregar Factura
-            </DialogTitle>
-            <DialogDescription>
-              {selectedRecurringForBill
-                ? `Crear factura para el recurrente "${selectedRecurringForBill.name}"`
-                : 'Crea una nueva factura asociada a un servicio'}
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={billForm.handleSubmit(onSubmitBill)} className="space-y-4">
-            {/* Servicio - Individual buttons instead of dropdown */}
-            <div className="space-y-2">
-              <Label>Servicio</Label>
-              {(!serviceAccounts || serviceAccounts.length === 0) ? (
-                <p className="text-xs text-muted-foreground">No hay servicios registrados. Crea uno primero en la sección de Servicios.</p>
-              ) : (
-                <div className="grid grid-cols-2 gap-2">
-                  {serviceAccounts.map((sa) => {
-                    const isSelected = billForm.watch('serviceAccountId') === sa.id
-                    return (
-                      <Button
-                        key={sa.id}
-                        type="button"
-                        variant="outline"
-                        className={`h-auto py-2 px-3 justify-start text-left transition-all ${
-                          isSelected
-                            ? 'border-neon-yellow/60 bg-neon-yellow/15 text-neon-yellow shadow-[0_0_10px_rgba(249,240,2,0.2)]'
-                            : 'border-neon-yellow/20 text-muted-foreground hover:border-neon-yellow/40 hover:bg-neon-yellow/5 hover:text-neon-yellow/80'
-                        }`}
-                        onClick={() => billForm.setValue('serviceAccountId', sa.id)}
-                      >
-                        <div className="flex flex-col items-start gap-0.5">
-                          <span className="text-xs font-medium truncate max-w-full">{sa.name}</span>
-                          {sa.provider && (
-                            <span className="text-[10px] opacity-60 truncate max-w-full">{sa.provider}</span>
-                          )}
-                        </div>
-                      </Button>
-                    )
-                  })}
-                </div>
-              )}
-              {billForm.formState.errors.serviceAccountId && (
-                <p className="text-xs text-destructive">{billForm.formState.errors.serviceAccountId.message}</p>
-              )}
-            </div>
-
-            {/* Monto */}
-            <div className="space-y-2">
-              <Label>Monto</Label>
-              <Input
-                type="number"
-                step="1"
-                placeholder="0"
-                {...billForm.register('amount')}
-                className="border-neon-yellow/20 focus-visible:border-neon-yellow/50"
-              />
-              {billForm.formState.errors.amount && (
-                <p className="text-xs text-destructive">{billForm.formState.errors.amount.message}</p>
-              )}
-            </div>
-
-            {/* Fecha de vencimiento */}
-            <div className="space-y-2">
-              <Label>Fecha de vencimiento</Label>
-              <DatePickerField
-                {...billForm.register('dueDate')}
-                accentColor={YELLOW}
-              />
-              {billForm.formState.errors.dueDate && (
-                <p className="text-xs text-destructive">{billForm.formState.errors.dueDate.message}</p>
-              )}
-            </div>
-
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setBillDialogOpen(false)}
-                className="border-neon-yellow/20"
-              >
-                Cancelar
-              </Button>
-              <Button
-                type="submit"
-                disabled={false}
-                className="bg-neon-yellow/20 border border-neon-yellow/50 text-neon-yellow hover:bg-neon-yellow/30"
-              >
-                <FileText className="size-4 mr-2" />
-                Crear Factura
-              </Button>
-            </DialogFooter>
-          </form>
         </DialogContent>
       </Dialog>
 
@@ -1308,7 +1137,7 @@ function PaymentHistorySubTable({
               <DatePickerField
                 value={editDate}
                 onChange={(e) => setEditDate((e.target as HTMLInputElement).value)}
-                accentColor={YELLOW}
+                accentColor="#f9f002"
               />
             </div>
             <div className="space-y-2">

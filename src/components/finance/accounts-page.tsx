@@ -55,6 +55,7 @@ import {
 import { Card, CardContent } from '@/components/ui/card'
 
 import { accountService, transferService, useAsyncData } from '@/lib/data'
+import { RefreshCw } from 'lucide-react'
 import { formatCurrency, ACCOUNT_TYPES } from '@/lib/finance-utils'
 import type { Account } from '@/lib/db-client'
 
@@ -208,21 +209,46 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
   const onSubmit = async (values: AccountFormValues) => {
     setSubmitting(true)
     try {
-      const accountData = {
-        name: values.name,
-        type: values.type,
-        balance: values.balance,
-        currency: values.currency,
-        icon: values.icon || '💰',
-        color: values.color || '#05d9e8',
-        notes: values.notes || undefined,
-      }
-
       if (editingAccount) {
-        await accountService.update(editingAccount.id, accountData)
+        // Check if balance was manually changed
+        const balanceChanged = values.balance !== editingAccount.balance
+        if (balanceChanged) {
+          // Use updateInitialBalance to properly reconcile
+          await accountService.update(editingAccount.id, {
+            name: values.name,
+            type: values.type,
+            currency: values.currency,
+            icon: values.icon || '💰',
+            color: values.color || '#05d9e8',
+            notes: values.notes || undefined,
+          })
+          // Calculate the difference: new balance - current balance
+          // This difference becomes the new initialBalance adjustment
+          const currentDelta = editingAccount.balance - (editingAccount.initialBalance ?? editingAccount.balance)
+          const newInitialBalance = values.balance - currentDelta
+          await accountService.updateInitialBalance(editingAccount.id, newInitialBalance)
+        } else {
+          await accountService.update(editingAccount.id, {
+            name: values.name,
+            type: values.type,
+            currency: values.currency,
+            icon: values.icon || '💰',
+            color: values.color || '#05d9e8',
+            notes: values.notes || undefined,
+          })
+        }
         toast.success('Cuenta actualizada')
       } else {
-        await accountService.create(accountData)
+        await accountService.create({
+          name: values.name,
+          type: values.type,
+          balance: values.balance,
+          initialBalance: values.balance,
+          currency: values.currency,
+          icon: values.icon || '💰',
+          color: values.color || '#05d9e8',
+          notes: values.notes || undefined,
+        })
         toast.success('Cuenta creada')
       }
       setDialogOpen(false)
@@ -231,6 +257,28 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
       toast.error(err instanceof Error ? err.message : 'Error al guardar')
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  // ── Recalculate Balance ──
+  const onRecalculate = async (accountId: string) => {
+    try {
+      const newBalance = await accountService.recalculateBalance(accountId)
+      toast.success(`Saldo recalculado: ${formatCurrency(newBalance)}`)
+      refetch()
+    } catch {
+      toast.error('Error al recalcular saldo')
+    }
+  }
+
+  // ── Recalculate All Balances ──
+  const onRecalculateAll = async () => {
+    try {
+      await accountService.recalculateAllBalances()
+      toast.success('Todos los saldos recalculados')
+      refetch()
+    } catch {
+      toast.error('Error al recalcular saldos')
     }
   }
 
@@ -293,6 +341,15 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
           </div>
         </div>
         <div className="flex gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            onClick={onRecalculateAll}
+            className="border-neon-green/30 text-neon-green hover:bg-neon-green/10"
+            title="Recalcular todos los saldos desde transacciones"
+          >
+            <RefreshCw className="size-4" />
+            Recalcular
+          </Button>
           <Button
             variant="outline"
             onClick={() => {
@@ -406,6 +463,15 @@ export function AccountsPage({ currentMonth, currentYear }: AccountsPageProps) {
                         </TableCell>
                         <TableCell className="text-right">
                           <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="size-7 text-muted-foreground hover:text-neon-green"
+                              onClick={() => onRecalculate(account.id)}
+                              title="Recalcular saldo"
+                            >
+                              <RefreshCw className="size-3.5" />
+                            </Button>
                             <Button
                               variant="ghost"
                               size="icon"
